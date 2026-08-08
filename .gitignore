@@ -1,0 +1,4 @@
+# This repo tracks backend/ only. frontend/ is a separate repo, kept as a
+# sibling folder for local dev — not tracked here.
+frontend/
+venv/
