@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Addresses — FEXO{% endblock %}
+{% block content %}
+<div class="fx-page-header"><div class="fx-container"><span class="fx-eyebrow">Account</span><h1 class="fx-serif">Addresses</h1></div></div>
+<div class="fx-section" style="padding-top:56px;">
+  <div class="fx-container" style="display:grid;grid-template-columns:220px 1fr;gap:48px;">
+    {% include "accounts/includes/sidebar.html" with active="addresses" %}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;">
+      <div>
+        {% for a in addresses %}
+          <div style="border:1px solid var(--fx-line-soft);padding:20px;margin-bottom:16px;">
+            <strong>{{ a.full_name }}</strong> {% if a.is_default %}<span class="fx-muted">(Default)</span>{% endif %}
+            <p class="fx-muted" style="font-size:13px;margin:8px 0;">{{ a.line1 }}, {{ a.line2 }}<br>{{ a.city }}, {{ a.state }} {{ a.postal_code }}<br>{{ a.phone }}</p>
+            <form method="post" action="{% url 'accounts:delete_address' a.id %}">
+              {% csrf_token %}
+              <button type="submit" style="background:none;border:none;color:var(--fx-muted);font-size:12px;text-decoration:underline;">Remove</button>
+            </form>
+          </div>
+        {% empty %}
+          <p class="fx-muted">No addresses saved yet.</p>
+        {% endfor %}
+      </div>
+      <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit" class="fx-btn fx-btn-solid">Save Address</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

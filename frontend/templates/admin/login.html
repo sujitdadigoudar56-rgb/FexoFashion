@@ -1,0 +1,151 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}{% if form.errors %}{% translate "Error:" %} {% endif %}{{ block.super }}{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static "admin/css/login.css" %}">
+{{ form.media }}
+<style>
+  body.login {
+    background: #111111 !important;
+    font-family: 'Inter', -apple-system, sans-serif;
+  }
+  .login #container {
+    background: #ffffff;
+    max-width: 400px;
+    margin: 90px auto;
+    padding: 48px 44px 40px;
+    border-radius: 2px;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.45);
+  }
+  .login #header {
+    background: none;
+    padding: 0 0 28px;
+    text-align: center;
+  }
+  .login #branding h1, .login #branding h1 a {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 30px;
+    letter-spacing: 0.14em;
+    color: #111 !important;
+    font-weight: 500;
+  }
+  .fexo-admin-sub {
+    display:block;margin-top:8px;font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:#8a8478;
+  }
+  .login .form-row {
+    padding: 0 0 18px;
+    border: none;
+  }
+  .login .form-row label {
+    font-size: 11px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: #767066;
+    display:block;
+    margin-bottom:6px;
+  }
+  .login .form-row input {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid rgba(17,17,17,.15);
+    border-radius: 0;
+    background: #f6f5f2;
+    font-size: 14px;
+    box-sizing: border-box;
+  }
+  .login .submit-row {
+    padding: 8px 0 0;
+    border: none;
+    text-align: center;
+  }
+  .login .submit-row input {
+    width: 100%;
+    background: #111 !important;
+    color: #fff !important;
+    border-radius: 0;
+    padding: 13px;
+    font-size: 12px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    border: 1px solid #111;
+    transition: background .3s ease, color .3s ease;
+    cursor: pointer;
+  }
+  .login .submit-row input:hover {
+    background: transparent !important;
+    color: #111 !important;
+  }
+  .login .password-reset-link { text-align:center; margin-top:18px; }
+  .login .password-reset-link a { font-size: 12px; color: #767066; }
+  .errornote {
+    border-radius: 0;
+    font-size: 13px;
+  }
+</style>
+{% endblock %}
+
+{% block bodyclass %}{{ block.super }} login{% endblock %}
+
+{% block usertools %}{% endblock %}
+{% block nav-global %}{% endblock %}
+{% block nav-sidebar %}{% endblock %}
+{% block content_title %}{% endblock %}
+{% block nav-breadcrumbs %}{% endblock %}
+
+{% block branding %}
+<h1 id="site-name"><a href="{% url 'admin:index' %}">FEXO</a></h1>
+<span class="fexo-admin-sub">Admin Portal</span>
+{% endblock %}
+
+{% block content %}
+{% if form.errors and not form.non_field_errors %}
+<p class="errornote">
+{% blocktranslate count counter=form.errors.items|length %}Please correct the error below.{% plural %}Please correct the errors below.{% endblocktranslate %}
+</p>
+{% endif %}
+
+{% if form.non_field_errors %}
+{% for error in form.non_field_errors %}
+<p class="errornote">
+    {{ error }}
+</p>
+{% endfor %}
+{% endif %}
+
+<div id="content-main">
+
+{% if user.is_authenticated %}
+<p class="errornote">
+{% blocktranslate trimmed %}
+    You are authenticated as {{ username }}, but are not authorized to
+    access this page. Would you like to login to a different account?
+{% endblocktranslate %}
+</p>
+{% endif %}
+
+<form action="{{ app_path }}" method="post" id="login-form">{% csrf_token %}
+  <div class="form-row">
+    {{ form.username.errors }}
+    {{ form.username.label_tag }} {{ form.username }}
+  </div>
+  <div class="form-row">
+    {{ form.password.errors }}
+    {{ form.password.label_tag }} {{ form.password }}
+    <input type="hidden" name="next" value="{{ next }}">
+  </div>
+  {% url 'admin_password_reset' as password_reset_url %}
+  {% if password_reset_url %}
+  <div class="password-reset-link">
+    <a href="{{ password_reset_url }}">{% translate 'Forgotten your login credentials?' %}</a>
+  </div>
+  {% endif %}
+  <div class="submit-row">
+    <input type="submit" value="{% translate 'Log in' %}">
+  </div>
+</form>
+
+</div>
+{% endblock %}

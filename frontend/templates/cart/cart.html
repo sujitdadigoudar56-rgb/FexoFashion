@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Your Bag — FEXO{% endblock %}
+{% block content %}
+<div class="fx-page-header"><div class="fx-container"><span class="fx-eyebrow">Bag</span><h1 class="fx-serif">Your Selections</h1></div></div>
+
+<div class="fx-section" style="padding-top:56px;">
+  <div class="fx-container">
+    {% if cart.items.count %}
+    <div style="display:grid;grid-template-columns:1fr 380px;gap:60px;">
+      <table class="fx-table">
+        <thead><tr><th>Product</th><th>Price</th><th>Qty</th><th>Total</th><th></th></tr></thead>
+        <tbody>
+          {% for item in cart.items.all %}
+          <tr>
+            <td style="display:flex;gap:16px;align-items:center;">
+              {% with img=item.product.primary_image %}
+                <img class="fx-cart-item-media" src="{{ img.image.url|default:'https://placehold.co/200x250/121212/8a8a8a?text=FEXO' }}" alt="{{ item.product.name }}">
+              {% endwith %}
+              <div>
+                <div>{{ item.product.name }}</div>
+                {% if item.variant %}<div class="fx-muted" style="font-size:12px;">Size: {{ item.variant.size }}</div>{% endif %}
+              </div>
+            </td>
+            <td>&#8377;{{ item.product.price }}</td>
+            <td>
+              <form method="post" action="{% url 'cart:cart_update' item.id %}" class="fx-qty-box">
+                {% csrf_token %}
+                <button type="button" class="fx-qty-minus">&minus;</button>
+                <input type="number" name="quantity" value="{{ item.quantity }}" min="0">
+                <button type="button" class="fx-qty-plus">+</button>
+                <button type="submit" style="margin-left:8px;background:none;border:none;color:var(--fx-muted);font-size:11px;">Update</button>
+              </form>
+            </td>
+            <td>&#8377;{{ item.line_total }}</td>
+            <td>
+              <form method="post" action="{% url 'cart:cart_remove' item.id %}">
+                {% csrf_token %}
+                <button type="submit" style="background:none;border:none;color:var(--fx-muted);">&times;</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="fx-summary-box">
+        <div class="fx-summary-row"><span>Subtotal</span><span>&#8377;{{ cart.subtotal }}</span></div>
+        <div class="fx-summary-row"><span>GST</span><span>&#8377;{{ cart.gst_total }}</span></div>
+        <div class="fx-summary-row"><span>Shipping</span><span>{% if cart.shipping_cost == 0 %}Free{% else %}&#8377;{{ cart.shipping_cost }}{% endif %}</span></div>
+        {% if cart.coupon %}<div class="fx-summary-row"><span>Discount ({{ cart.coupon.code }})</span><span>-&#8377;{{ cart.discount_amount }}</span></div>{% endif %}
+        <div class="fx-summary-row total"><span>Total</span><span>&#8377;{{ cart.grand_total }}</span></div>
+
+        <form method="post" action="{% url 'cart:apply_coupon' %}" style="display:flex;gap:8px;margin:20px 0;">
+          {% csrf_token %}
+          <input type="text" name="code" class="fx-input" placeholder="Coupon code" style="margin-bottom:0;">
+          <button type="submit" class="fx-btn">Apply</button>
+        </form>
+
+        <a href="{% url 'orders:checkout' %}" class="fx-btn fx-btn-solid fx-btn-block">Proceed to Checkout</a>
+      </div>
+    </div>
+    {% else %}
+      <div class="fx-center" style="padding:80px 0;">
+        <p class="fx-muted" style="margin-bottom:24px;">Your bag is empty.</p>
+        <a href="{% url 'products:shop' %}" class="fx-btn fx-btn-solid">Continue Shopping</a>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

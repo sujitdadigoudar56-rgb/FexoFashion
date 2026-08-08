@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Checkout — FEXO{% endblock %}
+{% block content %}
+<div class="fx-page-header"><div class="fx-container"><span class="fx-eyebrow">Checkout</span><h1 class="fx-serif">Complete Your Order</h1></div></div>
+
+<div class="fx-section" style="padding-top:56px;">
+  <div class="fx-container" style="display:grid;grid-template-columns:1fr 380px;gap:60px;">
+    <form method="post">
+      {% csrf_token %}
+      {% if addresses %}
+        <h4 style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:18px;">Shipping Address</h4>
+        <select name="shipping_address" class="fx-select">
+          {% for a in addresses %}<option value="{{ a.id }}">{{ a.full_name }} — {{ a.line1 }}, {{ a.city }}</option>{% endfor %}
+        </select>
+
+        <h4 style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;margin:24px 0 18px;">Billing Address</h4>
+        <select name="billing_address" class="fx-select">
+          {% for a in addresses %}<option value="{{ a.id }}">{{ a.full_name }} — {{ a.line1 }}, {{ a.city }}</option>{% endfor %}
+        </select>
+
+        <h4 style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;margin:24px 0 18px;">Order Notes</h4>
+        <textarea name="notes" class="fx-textarea" rows="3" placeholder="Delivery instructions (optional)"></textarea>
+
+        <h4 style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;margin:24px 0 18px;">Payment Method</h4>
+        <div style="border:1px solid var(--fx-line);padding:16px;margin-bottom:24px;">Cash on Delivery</div>
+
+        <button type="submit" class="fx-btn fx-btn-solid fx-btn-block">Place Order</button>
+      {% else %}
+        <p class="fx-muted">You need a saved address before checking out.</p>
+        <a href="{% url 'accounts:addresses' %}" class="fx-btn fx-btn-solid" style="margin-top:16px;">Add an Address</a>
+      {% endif %}
+    </form>
+
+    <div class="fx-summary-box">
+      <h4 style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:20px;">Order Summary</h4>
+      {% for item in cart.items.all %}
+        <div class="fx-summary-row"><span>{{ item.product.name }} &times; {{ item.quantity }}</span><span>&#8377;{{ item.line_total }}</span></div>
+      {% endfor %}
+      <div class="fx-summary-row"><span>GST</span><span>&#8377;{{ cart.gst_total }}</span></div>
+      <div class="fx-summary-row"><span>Shipping</span><span>{% if cart.shipping_cost == 0 %}Free{% else %}&#8377;{{ cart.shipping_cost }}{% endif %}</span></div>
+      {% if cart.coupon %}<div class="fx-summary-row"><span>Discount</span><span>-&#8377;{{ cart.discount_amount }}</span></div>{% endif %}
+      <div class="fx-summary-row total"><span>Total</span><span>&#8377;{{ cart.grand_total }}</span></div>
+    </div>
+  </div>
+</div>
+{% endblock %}

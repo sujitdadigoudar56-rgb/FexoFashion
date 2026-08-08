@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Order {{ order.order_number }} — FEXO{% endblock %}
+{% block content %}
+<div class="fx-page-header"><div class="fx-container"><span class="fx-eyebrow">Order</span><h1 class="fx-serif">{{ order.order_number }}</h1></div></div>
+<div class="fx-section" style="padding-top:56px;">
+  <div class="fx-container" style="max-width:800px;">
+    <p class="fx-muted" style="margin-bottom:24px;">Status: <strong style="color:var(--fx-accent);">{{ order.get_status_display }}</strong> &middot; Placed {{ order.created_at|date:"d M Y" }}</p>
+    <table class="fx-table">
+      <thead><tr><th>Product</th><th>Size</th><th>Qty</th><th>Total</th></tr></thead>
+      <tbody>
+        {% for item in order.items.all %}
+        <tr><td>{{ item.product_name }}</td><td>{{ item.size|default:"—" }}</td><td>{{ item.quantity }}</td><td>&#8377;{{ item.line_total }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="fx-summary-box" style="margin-top:30px;max-width:340px;margin-left:auto;">
+      <div class="fx-summary-row"><span>Subtotal</span><span>&#8377;{{ order.subtotal }}</span></div>
+      <div class="fx-summary-row"><span>GST</span><span>&#8377;{{ order.gst_amount }}</span></div>
+      <div class="fx-summary-row"><span>Shipping</span><span>&#8377;{{ order.shipping_cost }}</span></div>
+      {% if order.discount_amount %}<div class="fx-summary-row"><span>Discount</span><span>-&#8377;{{ order.discount_amount }}</span></div>{% endif %}
+      <div class="fx-summary-row total"><span>Total</span><span>&#8377;{{ order.grand_total }}</span></div>
+    </div>
+  </div>
+</div>
+{% endblock %}

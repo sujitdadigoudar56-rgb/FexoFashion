@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Create Account — FEXO{% endblock %}
+{% block content %}
+<div class="fx-auth-wrap">
+  <h1 class="fx-serif">Create Account</h1>
+  <p class="fx-sub">Join the FEXO inner circle.</p>
+  <form method="post">
+    {% csrf_token %}
+    <label class="fx-form-label">First Name</label>
+    <input type="text" name="first_name" class="fx-input" required>
+    <label class="fx-form-label">Last Name</label>
+    <input type="text" name="last_name" class="fx-input">
+    <label class="fx-form-label">Username</label>
+    <input type="text" name="username" class="fx-input" required>
+    <label class="fx-form-label">Email</label>
+    <input type="email" name="email" class="fx-input" required>
+    <label class="fx-form-label">Password</label>
+    <input type="password" name="password1" class="fx-input" required>
+    <label class="fx-form-label">Confirm Password</label>
+    <input type="password" name="password2" class="fx-input" required>
+    {% if form.errors %}
+      <ul style="color:#e57373;font-size:13px;margin-bottom:16px;">
+        {% for field in form %}{% for error in field.errors %}<li>{{ error }}</li>{% endfor %}{% endfor %}
+        {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+    <button type="submit" class="fx-btn fx-btn-solid fx-btn-block">Create Account</button>
+  </form>
+  <p class="fx-auth-switch">Already have an account? <a href="{% url 'accounts:login' %}">Sign in</a></p>
+</div>
+{% endblock %}

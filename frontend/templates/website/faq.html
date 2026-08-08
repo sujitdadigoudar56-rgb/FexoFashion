@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}FAQ — FEXO{% endblock %}
+{% block content %}
+<div class="fx-page-header"><div class="fx-container"><span class="fx-eyebrow">Help</span><h1 class="fx-serif">Frequently Asked Questions</h1></div></div>
+<div class="fx-section" style="padding-top:56px;">
+  <div class="fx-container" style="max-width:760px;">
+    {% for faq in faqs %}
+      <details style="border-bottom:1px solid var(--fx-line-soft);padding:20px 0;">
+        <summary style="cursor:pointer;font-size:16px;">{{ faq.question }}</summary>
+        <p class="fx-muted" style="margin-top:14px;line-height:1.7;">{{ faq.answer }}</p>
+      </details>
+    {% empty %}
+      <p class="fx-muted">FAQs will appear here once added in the admin dashboard.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

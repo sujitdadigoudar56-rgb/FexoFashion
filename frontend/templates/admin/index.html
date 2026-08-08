@@ -1,0 +1,48 @@
+{% extends "admin/index.html" %}
+{% load i18n %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  .fexo-stats-grid{
+    display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:0 0 28px;
+  }
+  .fexo-stat-card{
+    background:#fff;border:1px solid rgba(17,17,17,.10);padding:20px 22px;
+  }
+  .fexo-stat-card .fexo-stat-value{
+    font-family:'Cormorant Garamond',serif;font-size:32px;color:#111;line-height:1;
+  }
+  .fexo-stat-card .fexo-stat-label{
+    font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#767066;margin-top:8px;
+  }
+  @media(max-width:900px){.fexo-stats-grid{grid-template-columns:repeat(2,1fr);}}
+</style>
+{% endblock %}
+
+{% block content_title %}
+<h1>FEXO Admin Dashboard</h1>
+<p style="color:#767066;margin-top:-8px;">Manage the entire storefront — products, orders, customers, and site content — from here.</p>
+{% endblock %}
+
+{% block content %}
+<div class="fexo-stats-grid">
+  <div class="fexo-stat-card">
+    <div class="fexo-stat-value">{{ fexo_stats.product_count }}</div>
+    <div class="fexo-stat-label">Published Products</div>
+  </div>
+  <div class="fexo-stat-card">
+    <div class="fexo-stat-value">{{ fexo_stats.order_count }}</div>
+    <div class="fexo-stat-label">Total Orders</div>
+  </div>
+  <div class="fexo-stat-card">
+    <div class="fexo-stat-value">&#8377;{{ fexo_stats.revenue }}</div>
+    <div class="fexo-stat-label">Revenue (Confirmed+)</div>
+  </div>
+  <div class="fexo-stat-card">
+    <div class="fexo-stat-value">{{ fexo_stats.customer_count }}</div>
+    <div class="fexo-stat-label">Registered Customers</div>
+  </div>
+</div>
+{{ block.super }}
+{% endblock %}

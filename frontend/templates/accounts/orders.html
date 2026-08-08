@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}My Orders — FEXO{% endblock %}
+{% block content %}
+<div class="fx-page-header"><div class="fx-container"><span class="fx-eyebrow">Account</span><h1 class="fx-serif">My Orders</h1></div></div>
+<div class="fx-section" style="padding-top:56px;">
+  <div class="fx-container" style="display:grid;grid-template-columns:220px 1fr;gap:48px;">
+    {% include "accounts/includes/sidebar.html" with active="orders" %}
+    <table class="fx-table">
+      <thead><tr><th>Order</th><th>Date</th><th>Status</th><th>Total</th></tr></thead>
+      <tbody>
+      {% for order in orders %}
+        <tr>
+          <td><a href="{% url 'orders:order_detail' order.order_number %}">{{ order.order_number }}</a></td>
+          <td>{{ order.created_at|date:"d M Y" }}</td>
+          <td>{{ order.get_status_display }}</td>
+          <td>&#8377;{{ order.grand_total }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="4" class="fx-muted">No orders yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

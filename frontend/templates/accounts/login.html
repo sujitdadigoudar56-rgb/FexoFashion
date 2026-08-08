@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Login — FEXO{% endblock %}
+{% block content %}
+<div class="fx-auth-wrap">
+  <h1 class="fx-serif">Sign In</h1>
+  <p class="fx-sub">Welcome back to FEXO.</p>
+  <form method="post">
+    {% csrf_token %}
+    <label class="fx-form-label">Username</label>
+    <input type="text" name="username" class="fx-input" required>
+    <label class="fx-form-label">Password</label>
+    <input type="password" name="password" class="fx-input" required>
+    {% if form.errors %}<p style="color:#e57373;font-size:13px;margin-bottom:16px;">Invalid username or password.</p>{% endif %}
+    <button type="submit" class="fx-btn fx-btn-solid fx-btn-block">Sign In</button>
+  </form>
+  <p class="fx-auth-switch">
+    <a href="{% url 'accounts:password_reset' %}">Forgot password?</a> &middot;
+    New here? <a href="{% url 'accounts:register' %}">Create an account</a>
+  </p>
+</div>
+{% endblock %}
