@@ -27,16 +27,22 @@ load_dotenv(BASE_DIR / '.env')
 # that talks to this project purely over the JSON API mounted under
 # /api/ — it no longer needs Django to render templates or serve its
 # static assets, so there's no more FRONTEND_DIR/templates coupling here.
-# Origin(s) allowed to call the API from a browser:
+# Origin(s) allowed to call the API from a browser. Defaults cover local
+# dev and the deployed Vercel frontend so this works without needing a
+# CORS_ALLOWED_ORIGINS env var set on the host — override via env if the
+# frontend moves to a different URL.
 CORS_ALLOWED_ORIGINS = [
     origin.strip()
-    for origin in os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:3000').split(',')
+    for origin in os.environ.get(
+        'CORS_ALLOWED_ORIGINS',
+        'http://localhost:3000,https://fexofashionfrontend.vercel.app',
+    ).split(',')
     if origin.strip()
 ]
 
 # Base URL of the Next.js frontend — used to build links that point back
 # at it (e.g. the password-reset confirmation link sent by email).
-FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'https://fexofashionfrontend.vercel.app')
 
 
 # Quick-start development settings - unsuitable for production
