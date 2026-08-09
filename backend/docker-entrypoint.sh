@@ -14,6 +14,9 @@ python manage.py collectstatic --noinput --clear
 echo "Backfilling any missing media files..."
 python manage.py backfill_missing_media
 
+echo "Ensuring admin superuser..."
+python manage.py ensure_superuser
+
 # Render (and most PaaS hosts) inject $PORT and expect the process to bind
 # to it; default to 8000 for local docker-compose / plain `docker run`.
 echo "Starting gunicorn on port ${PORT:-8000}..."
