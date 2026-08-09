@@ -27,11 +27,12 @@ load_dotenv(BASE_DIR / '.env')
 # that talks to this project purely over the JSON API mounted under
 # /api/ — it no longer needs Django to render templates or serve its
 # static assets, so there's no more FRONTEND_DIR/templates coupling here.
-# Origin(s) allowed to call the API from a browser. The deployed Vercel
-# frontend and localhost:3000 are always included even if the host's
-# CORS_ALLOWED_ORIGINS env var is set to something else/incomplete — this
-# is additive on top of the env var, not replaced by it, since there's no
-# dashboard access to fix a misconfigured env var directly.
+# Origin(s) allowed to call the API from a browser. Every known frontend
+# origin (local dev, the old Vercel URL, prod, and staging) is always
+# included even if the host's CORS_ALLOWED_ORIGINS env var is set to
+# something else/incomplete — this is additive on top of the env var, not
+# replaced by it, since there's no dashboard access to fix a misconfigured
+# env var directly.
 CORS_ALLOWED_ORIGINS = list({
     *(
         origin.strip()
@@ -40,11 +41,14 @@ CORS_ALLOWED_ORIGINS = list({
     ),
     'http://localhost:3000',
     'https://fexofashionfrontend.vercel.app',
+    'https://fexofashion.com',
+    'https://www.fexofashion.com',
+    'https://staging.fexofashion.com',
 })
 
 # Base URL of the Next.js frontend — used to build links that point back
 # at it (e.g. the password-reset confirmation link sent by email).
-FRONTEND_URL = os.environ.get('FRONTEND_URL', 'https://fexofashionfrontend.vercel.app')
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'https://fexofashion.com')
 
 
 # Quick-start development settings - unsuitable for production
