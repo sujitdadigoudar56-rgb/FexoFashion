@@ -1,7 +1,7 @@
 from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import include, path
+from django.urls import include, path, re_path
+from django.views.static import serve
 
 from categories.views import CollectionDetailAPIView
 from core.views import healthcheck
@@ -23,11 +23,15 @@ urlpatterns = [
     path('api/', include('website.urls')),
 ]
 
-if settings.DEBUG:
-    # Static assets (django.contrib.admin's own CSS/JS) are auto-served by
-    # runserver via django.contrib.staticfiles — only media (uploaded
-    # product/category images etc.) needs this explicit dev route.
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# Static assets (django.contrib.admin's own CSS/JS) are auto-served by
+# runserver in dev, and by whitenoise in production — only media (uploaded
+# product/category images etc.) needs an explicit route, and unlike
+# django.conf.urls.static.static() this one isn't disabled when DEBUG=False:
+# there's no separate object-storage/CDN in front of media/ here, so Django
+# itself has to keep serving it in production too.
+urlpatterns += [
+    re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
+]
 
 admin.site.site_header = 'FEXO Admin'
 admin.site.site_title = 'FEXO Admin Portal'
