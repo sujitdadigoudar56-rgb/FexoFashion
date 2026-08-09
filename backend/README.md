@@ -1,20 +1,17 @@
 # FEXO — Backend
 
-Django backend for the FEXO storefront (PostgreSQL, no REST framework —
-pure server-rendered Django).
-
-This repo does **not** contain the frontend (templates/CSS/JS). That lives
-in a separate repo — see [Frontend checkout](#frontend-checkout) below for
-how the two are wired together.
+Django + Django REST Framework backend for the FEXO storefront
+(PostgreSQL). Django's own templates now only render `/admin/` — the
+storefront itself is a separate [Next.js frontend](#frontend) that
+consumes this project's JSON API, mounted under `/api/`.
 
 ## What's included
 
 - **8 Django apps**: `core`, `accounts`, `categories`, `products`, `cart`, `orders`, `wishlist`, `website`
-- **Full storefront**: home, shop with filters (category/color/size/price/search/sort), product detail with image gallery/zoom/360-viewer hook, cart, coupon-aware checkout with GST + shipping calculation, Cash on Delivery orders
-- **Accounts**: register, login, password reset (console email backend), dashboard, profile, order history, multi-address book
-- **Wishlist**, product reviews & ratings, recently-viewed (session-based), rule-based "Complete the Look" and related products
-- **Content**: journal/blog, FAQ, testimonials, Instagram gallery block, newsletter signup, contact form, legal pages (privacy, terms, shipping, returns)
-- **Site name and tagline ("Live in Fashion") are admin-editable** — go to `/admin/` → Site Settings to change them anywhere on the site without touching code.
+- **REST API** (`/api/...`, DRF + Token authentication + `django-cors-headers`): products with filters (category/collection/color/size/price/search/sort) + pagination, categories/collections, server-persisted cart (authenticated), coupon-aware checkout with GST + shipping calculation, Cash on Delivery orders, wishlist, product reviews & ratings, "Complete the Look"/related products
+- **Accounts API**: register, login/logout (token), password reset (console email backend, link points at the frontend's confirm page), profile, order history, multi-address book
+- **Content API**: journal/blog, FAQ, testimonials, Instagram gallery block, newsletter signup, contact form, site settings
+- **Site name and tagline ("Live in Fashion") are admin-editable** — go to `/admin/` → Site Settings, exposed to the frontend via `GET /api/site-settings/`.
 
 ## Admin — full site control
 
@@ -31,23 +28,23 @@ This is a strong, fully-working foundation — not the entire 20+ app spec in on
 - Invoice PDF generation
 - Custom admin analytics charts (stock Django admin covers CRUD today)
 - Sitemap.xml / robots.txt / schema.org markup
-- Real 360°-viewer image sets and product photography (seeded products have no images — see below)
+- Real 360°-viewer image sets (seed data ships plain placeholder photography — see below)
 - Coupon management UI beyond the admin panel
+- Guest (unauthenticated) cart — cart/wishlist/orders are all authenticated-only in this API; there's no anonymous-session cart the way a fully server-rendered app would have
 
-## Frontend checkout
+## Frontend
 
-`settings.py` reads templates and static assets from `FRONTEND_DIR`
-(default: a sibling `../frontend` folder), **not** from inside this repo.
-Clone both repos side by side so the default just works:
+The storefront is a separate Next.js app —
+`Fexo_Frontend/FexoFashion-Frontend` — that talks to this project purely
+over the JSON API mounted under `/api/`. Two settings connect them (see
+`.env.example`):
 
-```
-workspace/
-├── backend/   <- this repo
-└── frontend/  <- the frontend repo (templates/ + static/)
-```
+- `CORS_ALLOWED_ORIGINS` — origins allowed to call the API from a browser (default `http://localhost:3000`)
+- `FRONTEND_URL` — used to build the password-reset confirmation link the frontend renders (default `http://localhost:3000`)
 
-If your checkout lives somewhere else, set `FRONTEND_DIR=/absolute/path`
-in `.env` — see `.env.example`.
+Run both locally side by side: this project on `:8000`, the frontend's
+`npm run dev` on `:3000` (with its own `NEXT_PUBLIC_API_URL=http://127.0.0.1:8000`
+in `.env.local`).
 
 ## Setup
 
@@ -61,7 +58,7 @@ cp .env.example .env          # then edit .env — at minimum set a real SECRET_
 python manage.py makemigrations
 python manage.py migrate
 python manage.py createsuperuser
-python manage.py seed_demo_data   # optional: adds sample categories/products/testimonials/FAQs
+python manage.py seed_demo_data   # adds sample categories/products (+ placeholder photos)/testimonials/FAQs/coupons/journal posts
 python manage.py runserver
 ```
 
@@ -81,7 +78,8 @@ See `.env.example` for the full list:
 | `DB_PASSWORD` | PostgreSQL role password | — (required) |
 | `DB_HOST` | PostgreSQL host | `localhost` |
 | `DB_PORT` | PostgreSQL port | `5432` |
-| `FRONTEND_DIR` | Absolute path to the frontend repo checkout | unset → defaults to sibling `../frontend` |
+| `CORS_ALLOWED_ORIGINS` | Comma-separated origins allowed to call `/api/` from a browser | `http://localhost:3000` |
+| `FRONTEND_URL` | Base URL of the Next.js frontend, used in password-reset emails | `http://localhost:3000` |
 
 ### Database (PostgreSQL)
 
@@ -103,9 +101,22 @@ driver.
 
 Visit `http://127.0.0.1:8000/` for the storefront and `http://127.0.0.1:8000/admin/` for the dashboard.
 
+### Running with Docker instead
+
+`docker compose up --build` from the repo root builds and runs this app
+in the same container image used in production. See
+[../DEPLOY.md](../DEPLOY.md) for that, plus the Render deployment setup
+(auto-deploys on every push to `main`).
+
 ### Adding product photos
 
-The seed command creates products **without images** (no real photography ships in this repo). Upload images per product from `/admin/` → Products → open a product → add images in the inline "Product images" section, or add images to `Category`/`Banner`/`BlogPost` the same way. Until then, the UI shows tasteful placeholder imagery so pages never break.
+`seed_demo_data` generates plain solid-color placeholder JPEGs (via
+Pillow) for every product/category/banner/journal post it creates — no
+real photography ships in this repo. Replace them any time by uploading
+real images per product from `/admin/` → Products → open a product → the
+inline "Product images" section (same for `Category`/`Banner`/
+`BlogPost`). The frontend also falls back to a placehold.co image for
+anything left with no image at all, so pages never break either way.
 
 ## Notes
 
@@ -113,3 +124,4 @@ The seed command creates products **without images** (no real photography ships 
 - GST is configurable per-product (`gst_percent`, defaults to 5%).
 - Free shipping automatically applies above ₹2,999; otherwise a flat ₹149 fee.
 - Emails (password reset, etc.) print to the console in development — check your terminal.
+- API auth is DRF Token authentication — the frontend sends `Authorization: Token <t>` (obtained from `POST /api/accounts/login/` or `/register/`), not session cookies. `SessionAuthentication` is also enabled so `/api/` is browsable from a logged-in `/admin/` session while developing.

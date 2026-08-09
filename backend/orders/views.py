@@ -1,29 +1,36 @@
-from django.contrib import messages
-from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import get_object_or_404
+from rest_framework import generics, permissions, status
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from accounts.models import Address
-from cart.utils import get_cart
+from cart.models import Cart
 from products.models import ProductVariant
 
 from .models import Order, OrderItem
+from .serializers import CheckoutSerializer, OrderSerializer
 
 
-@login_required
-def checkout_view(request):
-    cart = get_cart(request)
-    if not cart or cart.items.count() == 0:
-        messages.warning(request, 'Your bag is empty.')
-        return redirect('cart:cart_detail')
+class CheckoutAPIView(APIView):
+    """POST /api/orders/checkout/ { shipping_address, billing_address, notes }
+    — reads the signed-in user's server Cart and turns it into an Order,
+    same transaction/stock-decrement flow as the original checkout_view.
+    (order_success/order_detail no longer need separate "did I just place
+    this" vs "look up an old one" views — both are just GET
+    /api/orders/<order_number>/ now.)"""
 
-    addresses = Address.objects.filter(user=request.user)
+    permission_classes = [permissions.IsAuthenticated]
 
-    if request.method == 'POST':
-        billing_id = request.POST.get('billing_address')
-        shipping_id = request.POST.get('shipping_address')
-        billing = get_object_or_404(Address, pk=billing_id, user=request.user)
-        shipping = get_object_or_404(Address, pk=shipping_id, user=request.user)
+    def post(self, request):
+        cart = Cart.objects.filter(user=request.user).first()
+        if not cart or cart.items.count() == 0:
+            return Response({'detail': 'Your bag is empty.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = CheckoutSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        billing = get_object_or_404(Address, pk=serializer.validated_data['billing_address'], user=request.user)
+        shipping = get_object_or_404(Address, pk=serializer.validated_data['shipping_address'], user=request.user)
 
         with transaction.atomic():
             order = Order.objects.create(
@@ -37,7 +44,7 @@ def checkout_view(request):
                 grand_total=cart.grand_total,
                 coupon=cart.coupon,
                 payment_method='cod',
-                notes=request.POST.get('notes', ''),
+                notes=serializer.validated_data.get('notes', ''),
             )
 
             for item in cart.items.select_related('product', 'variant'):
@@ -63,18 +70,27 @@ def checkout_view(request):
             cart.coupon = None
             cart.save()
 
-        return redirect('orders:order_success', order_number=order.order_number)
-
-    return render(request, 'orders/checkout.html', {'cart': cart, 'addresses': addresses})
+        return Response(OrderSerializer(order, context={'request': request}).data, status=status.HTTP_201_CREATED)
 
 
-@login_required
-def order_success_view(request, order_number):
-    order = get_object_or_404(Order, order_number=order_number, user=request.user)
-    return render(request, 'orders/order_success.html', {'order': order})
+class OrderListAPIView(generics.ListAPIView):
+    """GET /api/orders/ — the signed-in user's own orders."""
+
+    serializer_class = OrderSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None
+
+    def get_queryset(self):
+        return Order.objects.filter(user=self.request.user)
 
 
-@login_required
-def order_detail_view(request, order_number):
-    order = get_object_or_404(Order, order_number=order_number, user=request.user)
-    return render(request, 'orders/order_detail.html', {'order': order})
+class OrderDetailAPIView(generics.RetrieveAPIView):
+    """GET /api/orders/<order_number>/"""
+
+    serializer_class = OrderSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    lookup_field = 'order_number'
+    lookup_url_kwarg = 'order_number'
+
+    def get_queryset(self):
+        return Order.objects.filter(user=self.request.user)

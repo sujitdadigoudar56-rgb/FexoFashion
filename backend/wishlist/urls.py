@@ -1,9 +1,8 @@
 from django.urls import path
+
 from . import views
 
-app_name = 'wishlist'
-
 urlpatterns = [
-    path('', views.wishlist_view, name='wishlist'),
-    path('toggle/<slug:slug>/', views.wishlist_toggle, name='wishlist_toggle'),
+    path('', views.WishlistAPIView.as_view(), name='wishlist-detail'),
+    path('toggle/<slug:slug>/', views.WishlistToggleAPIView.as_view(), name='wishlist-toggle'),
 ]

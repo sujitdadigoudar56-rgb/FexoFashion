@@ -1,18 +1,15 @@
 from django.urls import path
+
 from . import views
 
-app_name = 'website'
-
 urlpatterns = [
-    path('', views.home_view, name='home'),
-    path('about/', views.about_view, name='about'),
-    path('contact/', views.contact_view, name='contact'),
-    path('faq/', views.faq_view, name='faq'),
-    path('journal/', views.journal_view, name='journal'),
-    path('journal/<slug:slug>/', views.journal_detail_view, name='journal_detail'),
-    path('privacy-policy/', views.privacy_policy_view, name='privacy_policy'),
-    path('terms/', views.terms_view, name='terms'),
-    path('shipping/', views.shipping_view, name='shipping'),
-    path('returns/', views.returns_view, name='returns'),
-    path('newsletter/', views.newsletter_signup, name='newsletter_signup'),
+    path('banners/', views.BannerListAPIView.as_view(), name='banner-list'),
+    path('testimonials/', views.TestimonialListAPIView.as_view(), name='testimonial-list'),
+    path('instagram-posts/', views.InstagramPostListAPIView.as_view(), name='instagram-post-list'),
+    path('journal/', views.BlogPostListAPIView.as_view(), name='blogpost-list'),
+    path('journal/<slug:slug>/', views.BlogPostDetailAPIView.as_view(), name='blogpost-detail'),
+    path('faqs/', views.FAQListAPIView.as_view(), name='faq-list'),
+    path('site-settings/', views.SiteSettingsAPIView.as_view(), name='site-settings'),
+    path('contact/', views.ContactCreateAPIView.as_view(), name='contact-create'),
+    path('newsletter/', views.NewsletterCreateAPIView.as_view(), name='newsletter-create'),
 ]

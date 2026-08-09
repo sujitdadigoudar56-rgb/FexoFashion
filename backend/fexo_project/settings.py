@@ -23,17 +23,20 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # full list of variables this project reads).
 load_dotenv(BASE_DIR / '.env')
 
-# The frontend (templates + static assets) is a separate repo/checkout,
-# not part of this one. Point FRONTEND_DIR at wherever it's checked out —
-# defaults to a sibling "frontend/" folder next to this repo, which is
-# what you get when both repos are cloned side by side:
-#   workspace/
-#     backend/   <- this repo
-#     frontend/  <- the frontend repo
-# Override FRONTEND_DIR in .env with an absolute path if your checkout
-# layout differs (e.g. a different clone location, or a build output dir).
-_frontend_dir_env = os.environ.get('FRONTEND_DIR')
-FRONTEND_DIR = Path(_frontend_dir_env) if _frontend_dir_env else BASE_DIR.parent / 'frontend'
+# The frontend is now a standalone Next.js app (a separate repo/checkout)
+# that talks to this project purely over the JSON API mounted under
+# /api/ — it no longer needs Django to render templates or serve its
+# static assets, so there's no more FRONTEND_DIR/templates coupling here.
+# Origin(s) allowed to call the API from a browser:
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:3000').split(',')
+    if origin.strip()
+]
+
+# Base URL of the Next.js frontend — used to build links that point back
+# at it (e.g. the password-reset confirmation link sent by email).
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 
 
 # Quick-start development settings - unsuitable for production
@@ -54,6 +57,28 @@ ALLOWED_HOSTS = [
     if host.strip()
 ]
 
+# Comma-separated list of scheme://host origins allowed to submit
+# cross-origin POSTs (Django's CSRF check). Required (non-empty) whenever
+# the app is served over HTTPS behind a proxy, e.g. https://fexo-backend.onrender.com
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',')
+    if origin.strip()
+]
+
+# Render (and most PaaS hosts) terminate TLS at the edge and proxy to this
+# container over plain HTTP, setting X-Forwarded-Proto so Django can tell
+# the original request was HTTPS. Without this, request.is_secure() is
+# always False behind the proxy, breaking secure cookies / SSL redirects.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+if not DEBUG:
+    # Toggle off via env only if you're intentionally serving plain HTTP
+    # (e.g. an internal/staging deploy without a TLS-terminating proxy).
+    SECURE_SSL_REDIRECT = os.environ.get('SECURE_SSL_REDIRECT', 'True') == 'True'
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
 
 # Application definition
 
@@ -65,6 +90,10 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django.contrib.humanize',
+
+    'rest_framework',
+    'rest_framework.authtoken',
+    'corsheaders',
 
     'core',
     'accounts',
@@ -78,6 +107,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -88,10 +119,17 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'fexo_project.urls'
 
+# Only django.contrib.admin's own bundled templates are rendered by this
+# project now (APP_DIRS=True finds those) — the storefront is the Next.js
+# app, consuming /api/ as JSON, so there's no frontend template DIRS here
+# anymore. The context processors below only ever run for those admin
+# templates now; core.context_processors.admin_dashboard_stats already
+# short-circuits for non-admin requests, and the rest just add context
+# variables admin/base_site.html doesn't use, so they're harmless no-ops.
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [FRONTEND_DIR / 'templates'],
+        'DIRS': [],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -108,6 +146,27 @@ TEMPLATES = [
         },
     },
 ]
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+        # Kept only so /api/ is browsable (and stays logged in) from a
+        # browser session while developing — the Next.js app always uses
+        # the token, never cookies.
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.AllowAny',
+    ],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 12,
+    # DRF stringifies Decimal fields by default (JSON has no fixed-point
+    # type, and stringifying avoids float rounding surprises) — but the
+    # frontend's TS types declare price/subtotal/grand_total/etc. as
+    # `number`, so turn that off and take the (here, harmless) float
+    # rounding instead of parseFloat()'ing every money field on the way in.
+    'COERCE_DECIMAL_TO_STRING': False,
+}
 
 WSGI_APPLICATION = 'fexo_project.wsgi.application'
 
@@ -165,11 +224,22 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
-STATICFILES_DIRS = [FRONTEND_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+# WhiteNoise serves collected static files straight from the Django/gunicorn
+# process — no separate nginx/CDN needed inside the container. See
+# https://whitenoise.readthedocs.io/
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -180,9 +250,10 @@ LOGOUT_REDIRECT_URL = 'website:home'
 
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
+# Prints emails (password reset, etc.) to the console instead of sending
+# them — there's no SMTP configured for local dev. (Previously this was
+# set via a `MAILERS` dict, which isn't a real Django setting name, so
+# console email was silently never active — Django was falling back to
+# the SMTP backend and failing to send.)
 
-MAILERS = {
-    'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
-    },
-}
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'

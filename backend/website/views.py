@@ -1,77 +1,85 @@
-from django.contrib import messages
-from django.shortcuts import get_object_or_404, redirect, render
+from rest_framework import generics, status
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from categories.models import Category, Collection
-from products.models import Product
+from .models import Banner, BlogPost, FAQ, InstagramPost, SiteSettings, Testimonial
+from .serializers import (
+    BannerSerializer,
+    BlogPostSerializer,
+    ContactMessageSerializer,
+    FAQSerializer,
+    InstagramPostSerializer,
+    NewsletterSubscriberSerializer,
+    SiteSettingsSerializer,
+    TestimonialSerializer,
+)
 
-from .forms import ContactForm, NewsletterForm
-from .models import Banner, BlogPost, FAQ, InstagramPost, Testimonial
-
-
-def home_view(request):
-    context = {
-        'banners': Banner.objects.filter(is_active=True),
-        'featured_products': Product.objects.filter(status='published', is_featured=True)[:8],
-        'trending_products': Product.objects.filter(status='published', is_trending=True)[:8],
-        'new_arrivals': Product.objects.filter(status='published', is_new_arrival=True)[:8],
-        'best_sellers': Product.objects.filter(status='published', is_best_seller=True)[:8],
-        'limited_drops': Collection.objects.filter(is_active=True, is_limited_drop=True)[:3],
-        'testimonials': Testimonial.objects.filter(is_active=True),
-        'instagram_posts': InstagramPost.objects.filter(is_active=True)[:8],
-        'categories': Category.objects.filter(is_active=True, parent__isnull=True)[:6],
-        'newsletter_form': NewsletterForm(),
-    }
-    return render(request, 'website/home.html', context)
+# about/privacy-policy/terms/shipping/returns had no model-backed content
+# in the original app (plain `render(request, 'website/x.html')` with no
+# context) — that prose now lives directly in the Next.js pages, so there's
+# nothing to serve an API for.
 
 
-def about_view(request):
-    return render(request, 'website/about.html')
+class BannerListAPIView(generics.ListAPIView):
+    queryset = Banner.objects.filter(is_active=True)
+    serializer_class = BannerSerializer
+    pagination_class = None
 
 
-def contact_view(request):
-    if request.method == 'POST':
-        form = ContactForm(request.POST)
-        if form.is_valid():
-            form.save()
-            messages.success(request, "Message sent. We'll be in touch shortly.")
-            return redirect('website:contact')
-    else:
-        form = ContactForm()
-    return render(request, 'website/contact.html', {'form': form})
+class TestimonialListAPIView(generics.ListAPIView):
+    queryset = Testimonial.objects.filter(is_active=True)
+    serializer_class = TestimonialSerializer
+    pagination_class = None
 
 
-def faq_view(request):
-    return render(request, 'website/faq.html', {'faqs': FAQ.objects.filter(is_active=True)})
+class InstagramPostListAPIView(generics.ListAPIView):
+    queryset = InstagramPost.objects.filter(is_active=True)
+    serializer_class = InstagramPostSerializer
+    pagination_class = None
 
 
-def journal_view(request):
-    posts = BlogPost.objects.filter(is_published=True)
-    return render(request, 'website/journal.html', {'posts': posts})
+class BlogPostListAPIView(generics.ListAPIView):
+    queryset = BlogPost.objects.filter(is_published=True)
+    serializer_class = BlogPostSerializer
+    pagination_class = None
 
 
-def journal_detail_view(request, slug):
-    post = get_object_or_404(BlogPost, slug=slug, is_published=True)
-    return render(request, 'website/journal_detail.html', {'post': post})
+class BlogPostDetailAPIView(generics.RetrieveAPIView):
+    queryset = BlogPost.objects.filter(is_published=True)
+    serializer_class = BlogPostSerializer
+    lookup_field = 'slug'
 
 
-def static_page(template_name):
-    def view(request):
-        return render(request, f'website/{template_name}.html')
-    return view
+class FAQListAPIView(generics.ListAPIView):
+    queryset = FAQ.objects.filter(is_active=True)
+    serializer_class = FAQSerializer
+    pagination_class = None
 
 
-privacy_policy_view = static_page('privacy_policy')
-terms_view = static_page('terms')
-shipping_view = static_page('shipping')
-returns_view = static_page('returns')
+class SiteSettingsAPIView(APIView):
+    """GET /api/site-settings/ — the one SiteSettings row (admin-editable
+    singleton), same as the site_settings context processor exposed to
+    every template before."""
+
+    def get(self, request):
+        settings_obj = SiteSettings.objects.first()
+        if settings_obj is None:
+            return Response({
+                'site_name': 'FEXO', 'tagline': 'Live in Fashion',
+                'contact_email': '', 'contact_phone': '',
+                'address': '', 'instagram_url': '', 'facebook_url': '', 'twitter_url': '',
+            })
+        return Response(SiteSettingsSerializer(settings_obj).data)
 
 
-def newsletter_signup(request):
-    if request.method == 'POST':
-        form = NewsletterForm(request.POST)
-        if form.is_valid():
-            form.save()
-            messages.success(request, 'Subscribed! Welcome to the FEXO inner circle.')
-        else:
-            messages.error(request, 'Please enter a valid email.')
-    return redirect(request.POST.get('next') or 'website:home')
+class ContactCreateAPIView(generics.CreateAPIView):
+    serializer_class = ContactMessageSerializer
+
+
+class NewsletterCreateAPIView(APIView):
+    def post(self, request):
+        serializer = NewsletterSubscriberSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({'detail': 'Subscribed! Welcome to the FEXO inner circle.'}, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

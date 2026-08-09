@@ -1,108 +1,159 @@
-from django.contrib import messages
-from django.contrib.auth import login
-from django.contrib.auth.decorators import login_required
-from django.contrib.auth.views import LoginView, PasswordResetView
-from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse_lazy
+from django.conf import settings
+from django.contrib.auth import authenticate, get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth.tokens import default_token_generator
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.mail import send_mail
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from rest_framework import generics, permissions, status
+from rest_framework.authtoken.models import Token
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from orders.models import Order
-from wishlist.models import WishlistItem
+from .models import Address
+from .serializers import AddressSerializer, LoginSerializer, MeUpdateSerializer, RegisterSerializer, UserSerializer
 
-from .forms import AddressForm, ProfileForm, RegisterForm
-from .models import Address, Profile
-
-
-class FexoLoginView(LoginView):
-    template_name = 'accounts/login.html'
-
-
-class FexoPasswordResetView(PasswordResetView):
-    template_name = 'accounts/forgot_password.html'
-    email_template_name = 'accounts/password_reset_email.html'
-    success_url = reverse_lazy('accounts:password_reset_done')
+User = get_user_model()
 
 
-def register_view(request):
-    if request.user.is_authenticated:
-        return redirect('website:home')
-    if request.method == 'POST':
-        form = RegisterForm(request.POST)
-        if form.is_valid():
-            user = form.save()
-            login(request, user)
-            messages.success(request, 'Welcome to FEXO. Your account has been created.')
-            return redirect('website:home')
-    else:
-        form = RegisterForm()
-    return render(request, 'accounts/register.html', {'form': form})
+class RegisterAPIView(APIView):
+    """POST /api/accounts/register/ — creates the user and signs them in
+    immediately (returns a token), same as register_view's login(request, user)."""
 
-
-@login_required
-def dashboard_view(request):
-    orders = Order.objects.filter(user=request.user)[:5]
-    wishlist_count = WishlistItem.objects.filter(wishlist__user=request.user).count()
-    addresses = Address.objects.filter(user=request.user)
-    context = {
-        'orders': orders,
-        'order_count': Order.objects.filter(user=request.user).count(),
-        'wishlist_count': wishlist_count,
-        'addresses': addresses,
-    }
-    return render(request, 'accounts/dashboard.html', context)
-
-
-@login_required
-def profile_view(request):
-    profile, _ = Profile.objects.get_or_create(user=request.user)
-    if request.method == 'POST':
-        form = ProfileForm(request.POST, request.FILES, instance=profile)
-        if form.is_valid():
-            form.save()
-            request.user.first_name = form.cleaned_data['first_name']
-            request.user.last_name = form.cleaned_data['last_name']
-            request.user.email = form.cleaned_data['email']
-            request.user.save()
-            messages.success(request, 'Profile updated.')
-            return redirect('accounts:profile')
-    else:
-        form = ProfileForm(
-            instance=profile,
-            initial={
-                'first_name': request.user.first_name,
-                'last_name': request.user.last_name,
-                'email': request.user.email,
-            },
+    def post(self, request):
+        serializer = RegisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        token, _ = Token.objects.get_or_create(user=user)
+        return Response(
+            {'token': token.key, 'user': UserSerializer(user).data},
+            status=status.HTTP_201_CREATED,
         )
-    return render(request, 'accounts/profile.html', {'form': form})
 
 
-@login_required
-def orders_view(request):
-    orders = Order.objects.filter(user=request.user)
-    return render(request, 'accounts/orders.html', {'orders': orders})
+class LoginAPIView(APIView):
+    """POST /api/accounts/login/"""
+
+    def post(self, request):
+        serializer = LoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = authenticate(
+            request,
+            username=serializer.validated_data['username'],
+            password=serializer.validated_data['password'],
+        )
+        if user is None:
+            return Response({'detail': 'Invalid username or password.'}, status=status.HTTP_400_BAD_REQUEST)
+        token, _ = Token.objects.get_or_create(user=user)
+        return Response({'token': token.key, 'user': UserSerializer(user).data})
 
 
-@login_required
-def addresses_view(request):
-    addresses = Address.objects.filter(user=request.user)
-    if request.method == 'POST':
-        form = AddressForm(request.POST)
-        if form.is_valid():
-            address = form.save(commit=False)
-            address.user = request.user
-            if address.is_default:
-                Address.objects.filter(user=request.user).update(is_default=False)
-            address.save()
-            messages.success(request, 'Address saved.')
-            return redirect('accounts:addresses')
-    else:
-        form = AddressForm()
-    return render(request, 'accounts/addresses.html', {'addresses': addresses, 'form': form})
+class LogoutAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        Token.objects.filter(user=request.user).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-@login_required
-def delete_address_view(request, pk):
-    address = get_object_or_404(Address, pk=pk, user=request.user)
-    address.delete()
-    messages.success(request, 'Address removed.')
-    return redirect('accounts:addresses')
+class MeAPIView(APIView):
+    """GET/PATCH /api/accounts/me/ — current user + profile, replaces
+    dashboard_view/profile_view's combined user+Profile editing."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        return Response(UserSerializer(request.user).data)
+
+    def patch(self, request):
+        serializer = MeUpdateSerializer(request.user, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        return Response(UserSerializer(user).data)
+
+
+class AddressListCreateAPIView(generics.ListCreateAPIView):
+    """GET/POST /api/accounts/addresses/"""
+
+    serializer_class = AddressSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None
+
+    def get_queryset(self):
+        return Address.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        if serializer.validated_data.get('is_default'):
+            Address.objects.filter(user=self.request.user).update(is_default=False)
+        serializer.save(user=self.request.user)
+
+
+class AddressDeleteAPIView(generics.DestroyAPIView):
+    """DELETE /api/accounts/addresses/<pk>/"""
+
+    serializer_class = AddressSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Address.objects.filter(user=self.request.user)
+
+
+class PasswordResetRequestAPIView(APIView):
+    """POST /api/accounts/password-reset/ { email } — mirrors Django's
+    PasswordResetForm, but builds the link against FRONTEND_URL (the
+    Next.js app's own confirm page) instead of a Django template/view."""
+
+    def post(self, request):
+        email = (request.data.get('email') or '').strip()
+        if email:
+            for user in User.objects.filter(email__iexact=email, is_active=True):
+                if not user.has_usable_password():
+                    continue
+                uid = urlsafe_base64_encode(force_bytes(user.pk))
+                token = default_token_generator.make_token(user)
+                reset_url = f'{settings.FRONTEND_URL}/accounts/password-reset/confirm/{uid}/{token}'
+                send_mail(
+                    subject='Reset your FEXO password',
+                    message=(
+                        f'Hello {user.get_username()},\n\n'
+                        'You requested a password reset for your FEXO account. '
+                        f'Visit the link below to set a new password:\n\n{reset_url}\n\n'
+                        "If you didn't request this, you can safely ignore this email.\n\n— FEXO"
+                    ),
+                    from_email=None,
+                    recipient_list=[user.email],
+                )
+        # Always report success — don't leak whether the email is registered.
+        return Response({'detail': 'If an account exists with that email, reset instructions are on the way.'})
+
+
+class PasswordResetConfirmAPIView(APIView):
+    """POST /api/accounts/password-reset/confirm/ { uid, token, new_password1, new_password2 }"""
+
+    def post(self, request):
+        uidb64 = request.data.get('uid', '')
+        token = request.data.get('token', '')
+        password1 = request.data.get('new_password1', '')
+        password2 = request.data.get('new_password2', '')
+
+        try:
+            uid = force_str(urlsafe_base64_decode(uidb64))
+            user = User.objects.get(pk=uid)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            user = None
+
+        if user is None or not default_token_generator.check_token(user, token):
+            return Response({'detail': 'This reset link is invalid or has expired.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not password1 or password1 != password2:
+            return Response({'detail': 'Passwords do not match.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            validate_password(password1, user=user)
+        except DjangoValidationError as exc:
+            return Response({'detail': list(exc.messages)}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(password1)
+        user.save()
+        return Response({'detail': 'Password updated.'})
