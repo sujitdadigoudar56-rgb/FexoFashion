@@ -29,9 +29,13 @@ urlpatterns = [
 # django.conf.urls.static.static() this one isn't disabled when DEBUG=False:
 # there's no separate object-storage/CDN in front of media/ here, so Django
 # itself has to keep serving it in production too.
-urlpatterns += [
-    re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
-]
+# Skipped entirely when USE_S3=True — uploads live in the bucket then, and
+# ImageField.url already points straight at S3, so nothing under /media/ on
+# this host is ever real.
+if not settings.USE_S3:
+    urlpatterns += [
+        re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
+    ]
 
 admin.site.site_header = 'FEXO Admin'
 admin.site.site_title = 'FEXO Admin Portal'

@@ -106,6 +106,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'corsheaders',
+    'storages',
 
     'core',
     'accounts',
@@ -252,6 +253,37 @@ STORAGES = {
         'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
     },
 }
+
+# Media (admin-uploaded product/category/banner images etc.) lives on local
+# disk by default — fine for dev, but wrong for hosts like Render whose
+# filesystem is ephemeral (this is what backfill_missing_media exists to
+# paper over). Set USE_S3=True in .env to switch 'default' storage to S3 so
+# uploads made from /admin/ persist and are served straight from the bucket.
+USE_S3 = os.environ.get('USE_S3', 'False') == 'True'
+
+if USE_S3:
+    AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
+    AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
+    AWS_STORAGE_BUCKET_NAME = os.environ.get('AWS_STORAGE_BUCKET_NAME')
+    AWS_S3_REGION_NAME = os.environ.get('AWS_S3_REGION_NAME', 'ap-south-1')
+    AWS_S3_SIGNATURE_VERSION = 's3v4'
+
+    # Don't let a re-upload with the same filename silently clobber an
+    # existing object — django-storages appends a random suffix instead.
+    AWS_S3_FILE_OVERWRITE = False
+
+    # New buckets default to Object Ownership "Bucket owner enforced", which
+    # rejects per-object ACLs outright — public read has to come from a
+    # bucket policy instead (see the setup notes), so don't send an ACL.
+    AWS_DEFAULT_ACL = None
+
+    # Bucket policy (not per-object ACLs) makes objects public, so plain
+    # URLs work without a SigV4 querystring — keeps image URLs stable/cacheable.
+    AWS_QUERYSTRING_AUTH = False
+
+    STORAGES['default'] = {
+        'BACKEND': 'storages.backends.s3.S3Storage',
+    }
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
