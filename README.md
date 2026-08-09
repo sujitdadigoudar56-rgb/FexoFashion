@@ -18,7 +18,10 @@ Each repo has its own README with full setup instructions:
   PostgreSQL, admin, running the server. Start here.
 - **[frontend/README.md](frontend/README.md)** — what's in the templates
   and static assets, how they're consumed by the backend (there's no
-  build step or standalone way to run this repo).
+  build step or standalone way to run this repo). Deployed separately
+  (e.g. Vercel) — not part of the backend's Docker/Render deploy.
+- **[DEPLOY.md](DEPLOY.md)** — Docker + Render production deploy for the
+  **backend only** (auto-deploys on every push to `main`).
 
 ## Quick start
 

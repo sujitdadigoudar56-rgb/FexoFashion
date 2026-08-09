@@ -1,0 +1,62 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# One-time setup:
+#   1. Push this repo (with this file) to GitHub.
+#   2. In the Render dashboard: New + -> Blueprint -> select this repo.
+#      Render reads this file and creates the service below.
+#   3. Fill in the "sync: false" env vars in the dashboard (Neon DB
+#      credentials) — they're deliberately not stored in this file.
+# After that, every push to `branch` below auto-deploys — no extra CI step
+# needed, this is Render's native GitHub integration.
+#
+# Backend-only: this builds backend/ alone, with no dependency on the
+# frontend repo (deployed separately, e.g. Vercel). Storefront pages that
+# render frontend templates will error until the two are wired together
+# at runtime; /admin/ and the healthCheckPath below don't depend on it.
+#
+# NOTE: the media disk and always-on service require a paid plan
+# ("starter" or above) — Render's free tier doesn't support persistent
+# disks and spins the service down when idle. See DEPLOY.md.
+services:
+  - type: web
+    name: fexo-backend
+    runtime: docker
+    repo: https://github.com/sujitdadigoudar56-rgb/FexoFashion.git
+    branch: main
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: starter
+    region: singapore # closest to the Neon (ap-southeast-1) DB; change if unavailable on your plan
+    autoDeploy: true
+    healthCheckPath: /healthz/
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      # Update after first deploy to match the real onrender.com URL (or
+      # custom domain) Render assigns — see DEPLOY.md.
+      - key: ALLOWED_HOSTS
+        value: fexo-backend.onrender.com
+      - key: CSRF_TRUSTED_ORIGINS
+        value: https://fexo-backend.onrender.com
+      - key: SECURE_SSL_REDIRECT
+        value: "True"
+      - key: DB_NAME
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: "5432"
+      - key: DB_SSLMODE
+        value: require
+      - key: WEB_CONCURRENCY
+        value: "3"
+    disk:
+      name: media
+      mountPath: /app/backend/media
+      sizeGB: 1

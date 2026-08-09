@@ -1,0 +1,47 @@
+# Validates every push/PR before Render's own GitHub integration deploys
+# it (Render auto-deploys on push to `main` independently of this workflow
+# — see render.yaml — this is just a safety net so a broken build/settings
+# error is caught in CI first instead of on prod).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  django-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: Django system check
+        working-directory: backend
+        env:
+          SECRET_KEY: ci-only-not-for-production
+          DEBUG: "False"
+          ALLOWED_HOSTS: localhost
+          DB_NAME: fexo_ci
+          DB_USER: fexo_ci
+          DB_PASSWORD: fexo_ci
+          DB_HOST: localhost
+          DB_PORT: "5432"
+          DB_SSLMODE: disable
+        run: python manage.py check --deploy
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -f backend/Dockerfile -t fexo-backend:ci backend/

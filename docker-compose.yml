@@ -1,0 +1,33 @@
+# Local dev/test harness for the same image Render builds in production.
+# Backend-only: the frontend is a separate repo, deployed separately (e.g.
+# Vercel) and not part of this build — storefront pages that render its
+# templates will error until the two are wired together at runtime;
+# /admin/ and /healthz/ don't depend on it. Uses backend/.env for config
+# (already pointed at your Neon Postgres — no local database container
+# needed).
+#
+#   docker compose up --build
+#   -> http://localhost:8000/admin/   http://localhost:8000/healthz/
+#
+# Source is bind-mounted so edits show up without a rebuild; the container
+# still re-runs migrate/collectstatic on every `up` (see docker-entrypoint.sh).
+services:
+  web:
+    build:
+      context: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - backend/.env
+    environment:
+      PORT: "8000"
+    volumes:
+      - ./backend:/app/backend
+      - media_data:/app/backend/media
+      # To test against the frontend locally, clone it as a sibling folder
+      # and uncomment (matches FRONTEND_DIR's default, no .env change needed):
+      # - ./frontend:/app/frontend
+    restart: unless-stopped
+
+volumes:
+  media_data:

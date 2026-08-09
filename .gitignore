@@ -1,4 +1,10 @@
-# This repo tracks backend/ only. frontend/ is a separate repo, kept as a
-# sibling folder for local dev — not tracked here.
+# This repo tracks backend/ only. frontend/ is a separate repo (deployed
+# separately, e.g. on Vercel), kept as a sibling folder for local dev only
+# — not tracked here.
 frontend/
 venv/
+
+# Real secrets belong in backend/.env only (already covered by
+# backend/.gitignore) — this repo-root rule is defense-in-depth so a
+# misplaced .env can never be committed from here again.
+.env
