@@ -79,6 +79,9 @@ class ProductListAPIView(generics.ListAPIView):
             'price_low': 'price',
             'price_high': '-price',
             'name': 'name',
+            'popularity':'OrderItem',
+            'rating': '-reviews__rating',
+            'discount': 'compare_at_price - price',
         }
         return products.distinct().order_by(sort_map.get(sort, '-created_at'))
 
@@ -131,6 +134,9 @@ class SearchSuggestionsAPIView(APIView):
         results = []
         if len(query) >= 2:
             results = list(
-                Product.objects.filter(status='published', name__icontains=query).values('name', 'slug')[:8]
+                Product.objects.filter(status='published')
+                .filter(Q(name__icontains=query) | Q(category__name__icontains=query) | Q(description__icontains=query))
+                .distinct()
+                .values('name', 'slug')[:8]
             )
         return Response({'results': results})
