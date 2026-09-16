@@ -1,4 +1,4 @@
-from django.db.models import Q
+from django.db.models import Avg, Count, ExpressionWrapper, DecimalField, F, Q
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
@@ -15,18 +15,6 @@ def _base_queryset():
 
 
 class ProductListAPIView(generics.ListAPIView):
-    """GET /api/products/ — same filters/sort the old shop_view supported
-    (category, collection, color, size, min_price, max_price, q, sort),
-    plus page/page_size via DRF's PageNumberPagination (PAGE_SIZE=12,
-    matching the original Paginator(products, 12)).
-
-    `sort=random` is new — the frontend uses it to power "Complete the
-    Look" (the original view did `.order_by('?')` server-side for that;
-    there's no dedicated endpoint for it, the frontend just filters this
-    list client-side by category/self, same as it already does for
-    "related products").
-    """
-
     serializer_class = ProductSerializer
 
     def get_queryset(self):
@@ -60,12 +48,12 @@ class ProductListAPIView(generics.ListAPIView):
         query = params.get('q')
         if query:
             products = products.filter(
-                Q(name__icontains=query) | Q(description__icontains=query) | Q(sku__icontains=query)
+                Q(name__icontains=query)
+                | Q(description__icontains=query)
+                | Q(sku__icontains=query)
+                | Q(category__name__icontains=query)
             )
 
-        # Boolean flag filters — power the home page's Featured/Trending/
-        # New Arrivals/Best Sellers rails (each is just this list endpoint
-        # with one of these set to true).
         for flag in ('is_featured', 'is_trending', 'is_new_arrival', 'is_best_seller'):
             if params.get(flag) == 'true':
                 products = products.filter(**{flag: True})
@@ -74,24 +62,46 @@ class ProductListAPIView(generics.ListAPIView):
         if sort == 'random':
             return products.distinct().order_by('?')
 
+        if sort == 'popularity':
+            products = products.annotate(
+                _popularity=Count(
+                    'orderitem',
+                    filter=~Q(orderitem__order__status='cancelled'),
+                    distinct=True,
+                )
+            )
+            return products.distinct().order_by('-_popularity', '-created_at')
+
+        if sort == 'rating':
+            products = products.annotate(
+                _avg_rating=Avg('reviews__rating', filter=Q(reviews__is_approved=True))
+            )
+            return products.distinct().order_by(F('_avg_rating').desc(nulls_last=True), '-created_at')
+
+        if sort in ('discount_low', 'discount_high'):
+            products = products.annotate(
+                _discount=ExpressionWrapper(
+                    F('compare_at_price') - F('price'), output_field=DecimalField()
+                )
+            )
+            direction = (
+                F('_discount').asc(nulls_last=True)
+                if sort == 'discount_low'
+                else F('_discount').desc(nulls_last=True)
+            )
+            return products.distinct().order_by(direction)
+
         sort_map = {
+            'relevance': '-is_featured',
             'newest': '-created_at',
             'price_low': 'price',
             'price_high': '-price',
             'name': 'name',
-            'popularity':'OrderItem',
-            'rating': '-reviews__rating',
-            'discount': 'compare_at_price - price',
         }
         return products.distinct().order_by(sort_map.get(sort, '-created_at'))
 
 
 class ProductDetailAPIView(generics.RetrieveAPIView):
-    """GET /api/products/<slug>/ — nested images/variants/category/
-    collections/reviews. (Session-based RecentlyViewed tracking from the
-    original view isn't ported — the frontend already tracks that
-    client-side in localStorage, which needs no backend support.)"""
-
     serializer_class = ProductSerializer
     lookup_field = 'slug'
 
@@ -100,9 +110,6 @@ class ProductDetailAPIView(generics.RetrieveAPIView):
 
 
 class AddReviewAPIView(APIView):
-    """POST /api/products/<slug>/review/ — one review per (product, user),
-    same as the original add_review view's update_or_create."""
-
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, slug):
@@ -125,17 +132,17 @@ class AddReviewAPIView(APIView):
 
 
 class SearchSuggestionsAPIView(APIView):
-    """GET /api/products/search-suggestions/?q= — lightweight name/slug
-    pairs for the nav search overlay, same shape the original view
-    returned."""
-
     def get(self, request):
         query = request.query_params.get('q', '').strip()
         results = []
         if len(query) >= 2:
             results = list(
                 Product.objects.filter(status='published')
-                .filter(Q(name__icontains=query) | Q(category__name__icontains=query) | Q(description__icontains=query))
+                .filter(
+                    Q(name__icontains=query)
+                    | Q(category__name__icontains=query)
+                    | Q(description__icontains=query)
+                )
                 .distinct()
                 .values('name', 'slug')[:8]
             )
