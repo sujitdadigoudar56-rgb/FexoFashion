@@ -8,3 +8,4 @@ venv/
 # backend/.gitignore) — this repo-root rule is defense-in-depth so a
 # misplaced .env can never be committed from here again.
 .env
+  
