@@ -95,7 +95,6 @@ if not DEBUG:
 # Application definition
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -116,6 +115,7 @@ INSTALLED_APPS = [
     'orders',
     'wishlist',
     'website',
+    'dashboard',
 ]
 
 MIDDLEWARE = [
@@ -132,13 +132,9 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'fexo_project.urls'
 
-# Only django.contrib.admin's own bundled templates are rendered by this
-# project now (APP_DIRS=True finds those) — the storefront is the Next.js
-# app, consuming /api/ as JSON, so there's no frontend template DIRS here
-# anymore. The context processors below only ever run for those admin
-# templates now; core.context_processors.admin_dashboard_stats already
-# short-circuits for non-admin requests, and the rest just add context
-# variables admin/base_site.html doesn't use, so they're harmless no-ops.
+# No pages are server-rendered any more — the storefront (Fexo-Frontend) and
+# the admin (Fexo-admin) are both Next.js apps consuming /api/ as JSON. This
+# is kept only for DRF's browsable API and Django's built-in error pages.
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -154,7 +150,6 @@ TEMPLATES = [
                 'wishlist.context_processors.wishlist_summary',
                 'categories.context_processors.nav_categories',
                 'website.context_processors.site_settings',
-                'core.context_processors.admin_dashboard_stats',
             ],
         },
     },
