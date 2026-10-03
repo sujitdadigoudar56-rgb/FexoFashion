@@ -6,6 +6,30 @@ from django.db import models
 from products.models import Product, ProductVariant
 
 
+FREE_SHIPPING_THRESHOLD = Decimal('2999.00')
+FLAT_SHIPPING_COST = Decimal('149.00')
+
+
+def compute_totals(items, coupon=None):
+    """Subtotal/GST/shipping/discount/grand total for a set of cart items.
+    Cart's properties use this for the whole cart; the bag page and
+    checkout use it for just the items the customer selected."""
+    items = list(items)
+    subtotal = sum((item.line_total for item in items), Decimal('0.00'))
+    gst_total = sum((item.gst_amount for item in items), Decimal('0.00'))
+    discount = coupon.calculate_discount(subtotal) if coupon and coupon.is_valid and items else Decimal('0.00')
+    shipping = Decimal('0.00') if subtotal == 0 or subtotal >= FREE_SHIPPING_THRESHOLD else FLAT_SHIPPING_COST
+    grand_total = subtotal + gst_total + shipping - discount
+    return {
+        'subtotal': subtotal,
+        'gst_total': gst_total,
+        'shipping_cost': shipping,
+        'discount_amount': discount,
+        'grand_total': grand_total if grand_total > 0 else Decimal('0.00'),
+        'item_count': sum(item.quantity for item in items),
+    }
+
+
 class Cart(models.Model):
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True, related_name='cart'
@@ -19,34 +43,32 @@ class Cart(models.Model):
     def __str__(self):
         return f'Cart #{self.pk}'
 
+    def totals(self, items=None):
+        return compute_totals(self.items.all() if items is None else items, self.coupon)
+
     @property
     def subtotal(self):
-        return sum((item.line_total for item in self.items.all()), Decimal('0.00'))
+        return self.totals()['subtotal']
 
     @property
     def gst_total(self):
-        return sum((item.gst_amount for item in self.items.all()), Decimal('0.00'))
+        return self.totals()['gst_total']
 
     @property
     def discount_amount(self):
-        if self.coupon and self.coupon.is_valid:
-            return self.coupon.calculate_discount(self.subtotal)
-        return Decimal('0.00')
+        return self.totals()['discount_amount']
 
     @property
     def shipping_cost(self):
-        if self.subtotal == 0 or self.subtotal >= Decimal('2999.00'):
-            return Decimal('0.00')
-        return Decimal('149.00')
+        return self.totals()['shipping_cost']
 
     @property
     def grand_total(self):
-        total = self.subtotal + self.gst_total + self.shipping_cost - self.discount_amount
-        return total if total > 0 else Decimal('0.00')
+        return self.totals()['grand_total']
 
     @property
     def item_count(self):
-        return sum(item.quantity for item in self.items.all())
+        return self.totals()['item_count']
 
 
 class CartItem(models.Model):

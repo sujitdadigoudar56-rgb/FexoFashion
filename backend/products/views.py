@@ -1,6 +1,7 @@
-from django.db.models import Avg, Count, ExpressionWrapper, DecimalField, F, Q
+from django.db.models import Avg, Count, ExpressionWrapper, DecimalField, F, Max, Min, Prefetch, Q
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, status
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -9,33 +10,75 @@ from .serializers import ProductReviewSerializer, ProductSerializer
 
 
 def _base_queryset():
+    # Approved reviews are prefetched once (ProductSerializer reads them from
+    # this prefetch) instead of one extra query per product.
     return Product.objects.filter(status='published').select_related('category').prefetch_related(
-        'images', 'variants', 'collections', 'reviews'
+        'images', 'variants', 'collections',
+        Prefetch('reviews', queryset=ProductReview.objects.filter(is_approved=True).select_related('user'),
+                 to_attr='approved_reviews'),
     )
 
 
+def _csv(params, key):
+    """Comma-separated (or repeated) query param -> list of non-empty values."""
+    values = []
+    for raw in params.getlist(key):
+        values.extend(v.strip() for v in raw.split(',') if v.strip())
+    return values
+
+
+class ProductPagination(PageNumberPagination):
+    page_size = 12
+    page_size_query_param = 'page_size'
+    max_page_size = 48
+
+
 class ProductListAPIView(generics.ListAPIView):
+    """GET /api/products/ — filters accept comma-separated values:
+    category, size, color, price (bands like `0-1000,1500-`), plus
+    collection, min_price/max_price, in_stock=true, q, and sort."""
+
     serializer_class = ProductSerializer
+    pagination_class = ProductPagination
 
     def get_queryset(self):
         products = _base_queryset()
         params = self.request.query_params
 
-        category = params.get('category')
-        if category:
-            products = products.filter(category__slug=category)
+        categories = _csv(params, 'category')
+        if categories:
+            products = products.filter(Q(category__slug__in=categories) | Q(category__parent__slug__in=categories))
 
         collection = params.get('collection')
         if collection:
             products = products.filter(collections__slug=collection)
 
-        color = params.get('color')
-        if color:
-            products = products.filter(color__iexact=color)
+        colors = _csv(params, 'color')
+        if colors:
+            color_q = Q()
+            for color in colors:
+                color_q |= Q(color__iexact=color)
+            products = products.filter(color_q)
 
-        size = params.get('size')
-        if size:
-            products = products.filter(variants__size=size, variants__stock_quantity__gt=0)
+        sizes = _csv(params, 'size')
+        if sizes:
+            products = products.filter(variants__size__in=sizes, variants__stock_quantity__gt=0)
+
+        bands = _csv(params, 'price')
+        if bands:
+            band_q = Q()
+            for band in bands:
+                low, _, high = band.partition('-')
+                cond = Q()
+                if low.strip().isdigit():
+                    cond &= Q(price__gte=int(low))
+                if high.strip().isdigit():
+                    cond &= Q(price__lte=int(high))
+                band_q |= cond
+            products = products.filter(band_q)
+
+        if params.get('in_stock') == 'true':
+            products = products.filter(variants__stock_quantity__gt=0)
 
         min_price = params.get('min_price')
         if min_price:
@@ -147,3 +190,33 @@ class SearchSuggestionsAPIView(APIView):
                 .values('name', 'slug')[:8]
             )
         return Response({'results': results})
+
+
+class ProductFacetsAPIView(APIView):
+    """GET /api/products/facets/ — the options the shop filter sidebar
+    offers: categories (with product counts), colours, sizes and the price
+    range of published products."""
+
+    def get(self, request):
+        published = Product.objects.filter(status='published')
+        categories = (
+            published.values('category__name', 'category__slug')
+            .annotate(count=Count('id'))
+            .order_by('category__name')
+        )
+        colors = sorted({c.strip().title() for c in published.values_list('color', flat=True) if c and c.strip()})
+        size_order = ['XS', 'S', 'M', 'L', 'XL', 'XXL']
+        sizes = set()
+        for value in published.values_list('available_sizes', flat=True):
+            sizes.update(s.strip() for s in (value or '').split(',') if s.strip())
+        price = published.aggregate(min=Min('price'), max=Max('price'))
+        return Response({
+            'categories': [
+                {'name': c['category__name'], 'slug': c['category__slug'], 'count': c['count']}
+                for c in categories
+            ],
+            'colors': colors,
+            'sizes': [s for s in size_order if s in sizes] + sorted(sizes - set(size_order)),
+            'price_min': float(price['min'] or 0),
+            'price_max': float(price['max'] or 0),
+        })

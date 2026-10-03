@@ -7,7 +7,7 @@ from orders.models import Coupon
 from products.models import Product, ProductVariant
 
 from .models import Cart, CartItem
-from .serializers import CartSerializer
+from .serializers import CartSerializer, parse_item_ids
 
 # Cart is authenticated-only in this API — there's no session-cookie-based
 # anonymous cart the way the original app had (that relied on Django
@@ -27,7 +27,8 @@ class CartAPIView(APIView):
 
     def get(self, request):
         cart = _get_cart(request.user)
-        return Response(CartSerializer(cart, context={'request': request}).data)
+        context = {'request': request, 'selected_ids': parse_item_ids(request.query_params.get('items'))}
+        return Response(CartSerializer(cart, context=context).data)
 
 
 class CartAddAPIView(APIView):

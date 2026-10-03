@@ -58,7 +58,14 @@ class Order(models.Model):
         ('cancelled', 'Cancelled'),
     ]
     PAYMENT_CHOICES = [
+        ('razorpay', 'Online (Razorpay)'),
         ('cod', 'Cash on Delivery'),
+    ]
+    PAYMENT_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('paid', 'Paid'),
+        ('failed', 'Failed'),
+        ('refunded', 'Refunded'),
     ]
 
     order_number = models.CharField(max_length=20, unique=True, blank=True)
@@ -81,6 +88,20 @@ class Order(models.Model):
     payment_method = models.CharField(max_length=10, choices=PAYMENT_CHOICES, default='cod')
     status = models.CharField(max_length=12, choices=STATUS_CHOICES, default='pending')
 
+    # Payment tracking. db_default keeps inserts from older app versions
+    # (which don't know these columns) working during a rolling deploy.
+    payment_status = models.CharField(
+        max_length=10, choices=PAYMENT_STATUS_CHOICES, default='pending', db_default='pending'
+    )
+    razorpay_order_id = models.CharField(max_length=40, blank=True, default='', db_default='', db_index=True)
+    razorpay_payment_id = models.CharField(max_length=40, blank=True, default='', db_default='')
+    razorpay_signature = models.CharField(max_length=128, blank=True, default='', db_default='')
+    razorpay_refund_id = models.CharField(max_length=40, blank=True, default='', db_default='')
+    paid_at = models.DateTimeField(null=True, blank=True)
+    # True once stock/coupon/bag have been settled for this order (at
+    # placement for COD, after successful payment for Razorpay).
+    is_finalized = models.BooleanField(default=False, db_default=True)
+
     notes = models.TextField(blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -96,6 +117,11 @@ class Order(models.Model):
         if not self.order_number:
             self.order_number = f'FEXO{uuid.uuid4().hex[:8].upper()}'
         super().save(*args, **kwargs)
+
+    @property
+    def awaiting_payment(self):
+        """An online order the customer hasn't paid for yet."""
+        return self.payment_method == 'razorpay' and self.payment_status in ('pending', 'failed') and self.status != 'cancelled'
 
 
 class OrderItem(models.Model):

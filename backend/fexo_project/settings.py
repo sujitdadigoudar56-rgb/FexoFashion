@@ -53,6 +53,13 @@ CORS_ALLOWED_ORIGINS = list({
 # at it (e.g. the password-reset confirmation link sent by email).
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'https://fexofashion.com')
 
+# Razorpay (online payments). Keys from the Razorpay dashboard → API Keys;
+# use rzp_test_… keys outside production. The webhook secret is the one
+# set on the dashboard webhook pointing at /api/payments/razorpay/webhook/.
+RAZORPAY_KEY_ID = os.environ.get('RAZORPAY_KEY_ID', '')
+RAZORPAY_KEY_SECRET = os.environ.get('RAZORPAY_KEY_SECRET', '')
+RAZORPAY_WEBHOOK_SECRET = os.environ.get('RAZORPAY_WEBHOOK_SECRET', '')
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/

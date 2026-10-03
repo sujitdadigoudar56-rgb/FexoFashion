@@ -4,6 +4,7 @@ from django.views.static import serve
 
 from categories.views import CollectionDetailAPIView
 from core.views import healthcheck
+from orders.views import razorpay_webhook
 
 urlpatterns = [
     path('healthz/', healthcheck, name='healthcheck'),
@@ -14,6 +15,7 @@ urlpatterns = [
     path('api/cart/', include('cart.urls')),
     path('api/wishlist/', include('wishlist.urls')),
     path('api/orders/', include('orders.urls')),
+    path('api/payments/razorpay/webhook/', razorpay_webhook, name='razorpay-webhook'),
     path('api/products/', include('products.urls')),
     path('api/categories/', include('categories.urls')),
     path('api/collections/<slug:slug>/', CollectionDetailAPIView.as_view(), name='collection-detail'),

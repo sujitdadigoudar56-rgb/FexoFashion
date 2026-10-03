@@ -59,5 +59,9 @@ class ProductSerializer(serializers.ModelSerializer):
         ]
 
     def get_reviews(self, obj):
-        approved = obj.reviews.filter(is_approved=True)
+        # Use the list view's prefetch when present (one query for all
+        # products) and fall back to a query for single objects.
+        approved = getattr(obj, 'approved_reviews', None)
+        if approved is None:
+            approved = obj.reviews.filter(is_approved=True).select_related('user')
         return ProductReviewSerializer(approved, many=True, context=self.context).data

@@ -183,12 +183,13 @@ class OrderCustomerSerializer(serializers.ModelSerializer):
 class AdminOrderListSerializer(serializers.ModelSerializer):
     customer = OrderCustomerSerializer(source='user', read_only=True)
     item_count = serializers.IntegerField(read_only=True)
+    awaiting_payment = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Order
         fields = [
-            'id', 'order_number', 'customer', 'status', 'payment_method',
-            'grand_total', 'item_count', 'created_at',
+            'id', 'order_number', 'customer', 'status', 'payment_method', 'payment_status',
+            'awaiting_payment', 'grand_total', 'item_count', 'created_at',
         ]
 
 
@@ -198,20 +199,38 @@ class AdminOrderSerializer(serializers.ModelSerializer):
     billing_address = AdminAddressSerializer(read_only=True)
     shipping_address = AdminAddressSerializer(read_only=True)
     coupon_code = serializers.CharField(source='coupon.code', read_only=True, default=None)
+    awaiting_payment = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Order
         fields = [
             'id', 'order_number', 'customer', 'billing_address', 'shipping_address',
             'subtotal', 'gst_amount', 'shipping_cost', 'discount_amount', 'grand_total',
-            'coupon_code', 'payment_method', 'status', 'notes', 'items',
-            'created_at', 'updated_at',
+            'coupon_code', 'payment_method', 'payment_status', 'awaiting_payment',
+            'razorpay_order_id', 'razorpay_payment_id', 'razorpay_refund_id', 'paid_at',
+            'is_finalized', 'status', 'notes', 'items', 'created_at', 'updated_at',
         ]
-        # Only the fulfilment fields are editable — totals and line items
-        # are a record of what the customer was charged.
+        # Only fulfilment fields are editable — totals and line items are a
+        # record of what the customer was charged. payment_status is
+        # editable for cash on delivery only (online payments are set by
+        # Razorpay).
         read_only_fields = [
-            f for f in fields if f not in ('status', 'notes')
+            f for f in fields if f not in ('status', 'notes', 'payment_status')
         ]
+
+    def validate(self, attrs):
+        order = self.instance
+        new_status = attrs.get('status', order.status)
+        if 'payment_status' in attrs and attrs['payment_status'] != order.payment_status:
+            if order.payment_method != 'cod':
+                raise serializers.ValidationError({'payment_status': ['Online payment status is updated by Razorpay; use Refund to refund it.']})
+            if attrs['payment_status'] not in ('pending', 'paid'):
+                raise serializers.ValidationError({'payment_status': ['Cash on delivery can only be pending or paid.']})
+        if order.awaiting_payment and new_status not in ('pending', 'cancelled'):
+            raise serializers.ValidationError({'status': ["This online order hasn't been paid yet, so it can only be cancelled."]})
+        if order.status == 'cancelled' and new_status != 'cancelled':
+            raise serializers.ValidationError({'status': ['Cancelled orders cannot be reopened.']})
+        return attrs
 
 
 class AdminCustomerSerializer(serializers.ModelSerializer):

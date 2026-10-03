@@ -20,6 +20,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from categories.models import Category, Collection
+from orders import razorpay as rzp
+from orders import services as order_services
 from orders.models import Coupon, Order, OrderItem
 from products.models import Product, ProductImage, ProductReview, ProductVariant
 from website.models import (
@@ -41,6 +43,16 @@ User = get_user_model()
 
 # Orders in these states don't count towards revenue.
 NON_REVENUE_STATUSES = ('cancelled',)
+
+
+def revenue_queryset():
+    """Orders that are real sales: not cancelled, not refunded, and — for
+    online payments — actually paid."""
+    return (
+        Order.objects.exclude(status__in=NON_REVENUE_STATUSES)
+        .exclude(payment_status='refunded')
+        .exclude(payment_method='razorpay', payment_status__in=('pending', 'failed'))
+    )
 
 
 # --- Auth --------------------------------------------------------------------
@@ -112,7 +124,7 @@ class DashboardStatsAPIView(APIView):
         start = now - timedelta(days=days)
         prev_start = start - timedelta(days=days)
 
-        revenue_orders = Order.objects.exclude(status__in=NON_REVENUE_STATUSES)
+        revenue_orders = revenue_queryset()
 
         def period(qs, a, b):
             agg = qs.filter(created_at__gte=a, created_at__lt=b).aggregate(
@@ -149,15 +161,17 @@ class DashboardStatsAPIView(APIView):
                 'orders': row['orders'] if row else 0,
             })
 
-        by_status = {row['status']: row['n'] for row in Order.objects.values('status').annotate(n=Count('id'))}
+        # Unpaid online orders aren't real orders yet; keep them out of the
+        # fulfilment pipeline counts.
+        placed = Order.objects.exclude(payment_method='razorpay', payment_status__in=('pending', 'failed'), status='pending')
+        by_status = {row['status']: row['n'] for row in placed.values('status').annotate(n=Count('id'))}
         status_breakdown = [
             {'status': key, 'label': label, 'count': by_status.get(key, 0)}
             for key, label in Order.STATUS_CHOICES
         ]
 
         top_products = list(
-            OrderItem.objects.filter(order__created_at__gte=start)
-            .exclude(order__status__in=NON_REVENUE_STATUSES)
+            OrderItem.objects.filter(order__created_at__gte=start, order__in=revenue_queryset())
             .values('product_id', 'product_name')
             .annotate(
                 units=Sum('quantity'),
@@ -204,6 +218,9 @@ class DashboardStatsAPIView(APIView):
                 'pending_orders': by_status.get('pending', 0),
                 'unread_messages': ContactMessage.objects.filter(is_read=False).count(),
                 'pending_reviews': ProductReview.objects.filter(is_approved=False).count(),
+                'awaiting_payment': Order.objects.filter(
+                    payment_method='razorpay', payment_status__in=('pending', 'failed'), status='pending'
+                ).count(),
             },
             'sales': series,
             'status_breakdown': status_breakdown,
@@ -356,14 +373,51 @@ class OrderViewSet(AdminViewSet):
         .annotate(item_count=Sum('items__quantity'))
     )
     lookup_field = 'order_number'
-    http_method_names = ['get', 'patch', 'head', 'options']
+    # POST is only routed to the `refund` action (no create route exists).
+    http_method_names = ['get', 'patch', 'post', 'head', 'options']
     search_fields = ['order_number', 'user__username', 'user__email', 'user__first_name', 'user__last_name']
     ordering_fields = ['created_at', 'grand_total', 'status']
     ordering = ['-created_at']
-    filter_fields = ('status', 'payment_method', 'user')
+    filter_fields = ('status', 'payment_method', 'payment_status', 'user')
 
     def get_serializer_class(self):
         return s.AdminOrderListSerializer if self.action == 'list' else s.AdminOrderSerializer
+
+    def perform_update(self, serializer):
+        order = serializer.instance
+        new_status = serializer.validated_data.get('status', order.status)
+        if new_status == 'cancelled' and order.status != 'cancelled':
+            # Cancelling restocks and refunds a paid online payment.
+            try:
+                order_services.cancel(order)
+            except (order_services.CheckoutError, rzp.RazorpayError) as exc:
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError({'detail': f'Could not cancel: refund failed ({exc}).'})
+            serializer.validated_data.pop('status')
+        if new_status == 'delivered' and order.payment_method == 'cod' and 'payment_status' not in serializer.validated_data:
+            # Cash is collected on delivery.
+            serializer.validated_data['payment_status'] = 'paid'
+        instance = serializer.save()
+        if instance.payment_status == 'paid' and not instance.paid_at:
+            from django.utils import timezone
+            instance.paid_at = timezone.now()
+            instance.save(update_fields=['paid_at', 'updated_at'])
+
+    def create(self, request, *args, **kwargs):
+        # Orders are only created by customers at checkout.
+        return Response({'detail': 'Method "POST" not allowed.'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    @action(detail=True, methods=['post'])
+    def refund(self, request, order_number=None):
+        """POST /api/admin/orders/<order_number>/refund/ — full refund of a
+        paid online order through Razorpay (the order itself stays as is;
+        cancel it too if it won't ship)."""
+        order = self.get_object()
+        try:
+            order_services.refund(order, reason=str(request.data.get('reason', ''))[:200])
+        except (order_services.CheckoutError, rzp.RazorpayError) as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(s.AdminOrderSerializer(self.get_queryset().get(pk=order.pk), context={'request': request}).data)
 
     def get_queryset(self):
         qs = super().get_queryset()

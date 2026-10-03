@@ -1,3 +1,5 @@
+import re
+
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.password_validation import validate_password
@@ -8,11 +10,19 @@ from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework import generics, permissions, status
 from rest_framework.authtoken.models import Token
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Address
-from .serializers import AddressSerializer, LoginSerializer, MeUpdateSerializer, RegisterSerializer, UserSerializer
+from .models import Address, Profile
+from .serializers import (
+    AddressSerializer,
+    ChangePasswordSerializer,
+    LoginSerializer,
+    MeUpdateSerializer,
+    RegisterSerializer,
+    UserSerializer,
+)
 
 User = get_user_model()
 
@@ -27,26 +37,43 @@ class RegisterAPIView(APIView):
         user = serializer.save()
         token, _ = Token.objects.get_or_create(user=user)
         return Response(
-            {'token': token.key, 'user': UserSerializer(user).data},
+            {'token': token.key, 'user': UserSerializer(user, context={'request': request}).data},
             status=status.HTTP_201_CREATED,
         )
 
 
+def _resolve_username(identifier):
+    """Map the login identifier — email, mobile number or username — to
+    the username Django's authenticate() expects."""
+    identifier = identifier.strip()
+    if '@' in identifier:
+        user = User.objects.filter(email__iexact=identifier).order_by('pk').first()
+        return user.get_username() if user else identifier
+    digits = re.sub(r'\D', '', identifier)
+    if len(digits) >= 10:
+        # Match on the last 10 digits so "+91 98765 43210" == "9876543210".
+        for profile in Profile.objects.select_related('user').exclude(phone=''):
+            if re.sub(r'\D', '', profile.phone)[-10:] == digits[-10:]:
+                return profile.user.get_username()
+    return identifier
+
+
 class LoginAPIView(APIView):
-    """POST /api/accounts/login/"""
+    """POST /api/accounts/login/ { username, password } — `username` may be
+    an email address, mobile number or username."""
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = authenticate(
             request,
-            username=serializer.validated_data['username'],
+            username=_resolve_username(serializer.validated_data['username']),
             password=serializer.validated_data['password'],
         )
         if user is None:
-            return Response({'detail': 'Invalid username or password.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'Invalid email/mobile number or password.'}, status=status.HTTP_400_BAD_REQUEST)
         token, _ = Token.objects.get_or_create(user=user)
-        return Response({'token': token.key, 'user': UserSerializer(user).data})
+        return Response({'token': token.key, 'user': UserSerializer(user, context={'request': request}).data})
 
 
 class LogoutAPIView(APIView):
@@ -64,13 +91,47 @@ class MeAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        return Response(UserSerializer(request.user).data)
+        return Response(UserSerializer(request.user, context={'request': request}).data)
 
     def patch(self, request):
         serializer = MeUpdateSerializer(request.user, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        return Response(UserSerializer(user).data)
+        return Response(UserSerializer(user, context={'request': request}).data)
+
+
+class AvatarUploadAPIView(APIView):
+    """POST /api/accounts/me/avatar/ (multipart, field `avatar`)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        file = request.FILES.get('avatar')
+        if not file:
+            return Response({'avatar': ['Choose an image to upload.']}, status=status.HTTP_400_BAD_REQUEST)
+        if file.size > 2 * 1024 * 1024:
+            return Response({'avatar': ['Images must be 2 MB or smaller.']}, status=status.HTTP_400_BAD_REQUEST)
+        if (file.content_type or '') not in ('image/jpeg', 'image/png', 'image/webp'):
+            return Response({'avatar': ['Upload a JPG, PNG or WebP image.']}, status=status.HTTP_400_BAD_REQUEST)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        profile.avatar = file
+        profile.save()
+        return Response(UserSerializer(request.user, context={'request': request}).data)
+
+
+class ChangePasswordAPIView(APIView):
+    """POST /api/accounts/password/change/ { current_password, new_password }.
+    The DRF token stays valid, so the user remains signed in."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        serializer = ChangePasswordSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        request.user.set_password(serializer.validated_data['new_password'])
+        request.user.save()
+        return Response({'detail': 'Password updated.'})
 
 
 class AddressListCreateAPIView(generics.ListCreateAPIView):
@@ -89,14 +150,20 @@ class AddressListCreateAPIView(generics.ListCreateAPIView):
         serializer.save(user=self.request.user)
 
 
-class AddressDeleteAPIView(generics.DestroyAPIView):
-    """DELETE /api/accounts/addresses/<pk>/"""
+class AddressDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
+    """GET/PATCH/DELETE /api/accounts/addresses/<pk>/"""
 
     serializer_class = AddressSerializer
     permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ['get', 'patch', 'delete', 'head', 'options']
 
     def get_queryset(self):
         return Address.objects.filter(user=self.request.user)
+
+    def perform_update(self, serializer):
+        if serializer.validated_data.get('is_default'):
+            Address.objects.filter(user=self.request.user).exclude(pk=serializer.instance.pk).update(is_default=False)
+        serializer.save()
 
 
 class PasswordResetRequestAPIView(APIView):
