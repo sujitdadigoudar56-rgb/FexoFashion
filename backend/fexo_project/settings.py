@@ -28,7 +28,7 @@ load_dotenv(BASE_DIR / '.env')
 # /api/ — it no longer needs Django to render templates or serve its
 # static assets, so there's no more FRONTEND_DIR/templates coupling here.
 # Origin(s) allowed to call the API from a browser. Every known frontend
-# origin (local dev, the old Vercel URL, prod, and staging) is always
+# origin (local dev, the old Vercel URL, prod, staging and the admin app) is always
 # included even if the host's CORS_ALLOWED_ORIGINS env var is set to
 # something else/incomplete — this is additive on top of the env var, not
 # replaced by it, since there's no dashboard access to fix a misconfigured
@@ -44,6 +44,9 @@ CORS_ALLOWED_ORIGINS = list({
     'https://fexofashion.com',
     'https://www.fexofashion.com',
     'https://staging.fexofashion.com',
+    # Admin app (Fexo-admin): local dev and its Vercel deployment.
+    'http://localhost:3001',
+    'https://fexo-admin.vercel.app',
 })
 
 # Base URL of the Next.js frontend — used to build links that point back
