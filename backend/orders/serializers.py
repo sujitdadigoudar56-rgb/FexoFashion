@@ -8,7 +8,6 @@ from .models import Order, OrderItem
 class OrderItemSerializer(serializers.ModelSerializer):
     product_slug = serializers.SerializerMethodField()
     product_image = serializers.SerializerMethodField()
-    color = serializers.SerializerMethodField()
     line_total = serializers.ReadOnlyField()
 
     class Meta:
@@ -25,9 +24,6 @@ class OrderItemSerializer(serializers.ModelSerializer):
         url = image.image.url
         request = self.context.get('request')
         return request.build_absolute_uri(url) if request and url.startswith('/') else url
-
-    def get_color(self, obj):
-        return obj.product.color if obj.product else ''
 
     def get_product_slug(self, obj):
         # product is SET_NULL on delete, so it can legitimately be gone —

@@ -194,6 +194,7 @@ class DashboardStatsAPIView(APIView):
                 'product_name': v.product.name,
                 'sku': v.product.sku,
                 'size': v.size,
+                'color': v.color,
                 'stock_quantity': v.stock_quantity,
                 'low_stock_threshold': v.low_stock_threshold,
             }
@@ -318,11 +319,20 @@ class ProductViewSet(AdminViewSet):
             ).distinct()
         return qs
 
-    def perform_create(self, serializer):
+    def _save_with_variants(self, serializer):
+        # Every chosen colour x listed size gets a variant row so stock can be edited. Rows for
+        # unticked colours/sizes are kept (they may have stock or orders) until deleted explicitly.
+        colors = serializer.validated_data.pop('colors', None)
         product = serializer.save()
-        # Give every listed size a variant row so stock can be edited.
-        for size in product.sizes_list:
-            ProductVariant.objects.get_or_create(product=product, size=size)
+        for color in colors if colors is not None else (product.colors or ['']):
+            for size in product.sizes_list:
+                ProductVariant.objects.get_or_create(product=product, color=color, size=size)
+
+    def perform_create(self, serializer):
+        self._save_with_variants(serializer)
+
+    def perform_update(self, serializer):
+        self._save_with_variants(serializer)
 
 
 class ProductImageViewSet(AdminViewSet):

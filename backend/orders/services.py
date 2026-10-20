@@ -63,6 +63,7 @@ def create_order(*, user, cart, items, totals, shipping, billing, notes, payment
             unit_price=item.product.price,
             quantity=item.quantity,
             size=item.variant.size if item.variant else '',
+            color=item.variant.color if item.variant else '',
         )
     return order
 

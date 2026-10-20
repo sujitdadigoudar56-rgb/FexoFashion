@@ -5,7 +5,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Product, ProductReview
+from .models import COLORS, Product, ProductReview, ProductVariant
 from .serializers import ProductReviewSerializer, ProductSerializer
 
 
@@ -57,7 +57,7 @@ class ProductListAPIView(generics.ListAPIView):
         if colors:
             color_q = Q()
             for color in colors:
-                color_q |= Q(color__iexact=color)
+                color_q |= Q(variants__color__iexact=color)
             products = products.filter(color_q)
 
         sizes = _csv(params, 'size')
@@ -204,7 +204,8 @@ class ProductFacetsAPIView(APIView):
             .annotate(count=Count('id'))
             .order_by('category__name')
         )
-        colors = sorted({c.strip().title() for c in published.values_list('color', flat=True) if c and c.strip()})
+        have = set(ProductVariant.objects.filter(product__in=published).values_list('color', flat=True))
+        colors = [c for c in COLORS if c in have]
         size_order = ['XS', 'S', 'M', 'L', 'XL', 'XXL']
         sizes = set()
         for value in published.values_list('available_sizes', flat=True):

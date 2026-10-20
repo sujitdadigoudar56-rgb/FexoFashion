@@ -132,6 +132,7 @@ class OrderItem(models.Model):
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
     quantity = models.PositiveIntegerField(default=1)
     size = models.CharField(max_length=10, blank=True)
+    color = models.CharField(max_length=30, blank=True)
 
     @property
     def line_total(self):

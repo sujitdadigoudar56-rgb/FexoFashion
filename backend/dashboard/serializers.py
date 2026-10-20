@@ -12,7 +12,7 @@ from rest_framework import serializers
 from accounts.models import Address, Profile
 from categories.models import Category, Collection
 from orders.models import Coupon, Order, OrderItem
-from products.models import Product, ProductImage, ProductReview, ProductVariant
+from products.models import COLOR_CHOICES, Product, ProductImage, ProductReview, ProductVariant
 from website.models import (
     FAQ,
     Banner,
@@ -77,7 +77,7 @@ class AdminCollectionSerializer(serializers.ModelSerializer):
 class AdminProductImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductImage
-        fields = ['id', 'product', 'image', 'alt_text', 'is_primary', 'display_order']
+        fields = ['id', 'product', 'image', 'alt_text', 'is_primary', 'display_order', 'color']
 
 
 class AdminProductVariantSerializer(serializers.ModelSerializer):
@@ -85,7 +85,8 @@ class AdminProductVariantSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ProductVariant
-        fields = ['id', 'product', 'size', 'stock_quantity', 'low_stock_threshold', 'is_low_stock']
+        fields = ['id', 'product', 'sku', 'color', 'size', 'stock_quantity', 'low_stock_threshold', 'is_low_stock']
+        extra_kwargs = {'sku': {'required': False, 'allow_blank': True}}
 
 
 class AdminProductListSerializer(serializers.ModelSerializer):
@@ -118,13 +119,15 @@ class AdminProductSerializer(serializers.ModelSerializer):
     images = AdminProductImageSerializer(many=True, read_only=True)
     variants = AdminProductVariantSerializer(many=True, read_only=True)
     total_stock = serializers.IntegerField(read_only=True)
+    # Read: colours that have variants. Write: colours to make sure exist (one variant per colour x size).
+    colors = serializers.ListField(child=serializers.ChoiceField(choices=COLOR_CHOICES), required=False)
 
     class Meta:
         model = Product
         fields = [
             'id', 'name', 'slug', 'sku', 'category', 'category_name', 'collections',
             'short_description', 'description', 'fabric_details', 'size_guide',
-            'price', 'compare_at_price', 'gst_percent', 'color', 'available_sizes',
+            'price', 'compare_at_price', 'gst_percent', 'colors', 'available_sizes',
             'is_featured', 'is_trending', 'is_new_arrival', 'is_best_seller',
             'status', 'meta_title', 'meta_description', 'total_stock',
             'images', 'variants', 'created_at', 'updated_at',
@@ -166,7 +169,7 @@ class AdminOrderItemSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = OrderItem
-        fields = ['id', 'product', 'product_slug', 'product_name', 'unit_price', 'quantity', 'size', 'line_total']
+        fields = ['id', 'product', 'product_slug', 'product_name', 'unit_price', 'quantity', 'color', 'size', 'line_total']
 
 
 class OrderCustomerSerializer(serializers.ModelSerializer):

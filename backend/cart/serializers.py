@@ -28,7 +28,7 @@ class CartItemProductSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Product
-        fields = ['id', 'name', 'slug', 'price', 'compare_at_price', 'color', 'primary_image']
+        fields = ['id', 'name', 'slug', 'price', 'compare_at_price', 'primary_image']
 
     def get_primary_image(self, obj):
         image = obj.primary_image
@@ -42,15 +42,19 @@ class CartItemProductSerializer(serializers.ModelSerializer):
 class CartItemSerializer(serializers.ModelSerializer):
     product = CartItemProductSerializer(read_only=True)
     variant_size = serializers.SerializerMethodField()
+    variant_color = serializers.SerializerMethodField()
     line_total = serializers.ReadOnlyField()
     gst_amount = serializers.ReadOnlyField()
 
     class Meta:
         model = CartItem
-        fields = ['id', 'product', 'variant', 'variant_size', 'quantity', 'line_total', 'gst_amount']
+        fields = ['id', 'product', 'variant', 'variant_size', 'variant_color', 'quantity', 'line_total', 'gst_amount']
 
     def get_variant_size(self, obj):
         return obj.variant.size if obj.variant else None
+
+    def get_variant_color(self, obj):
+        return obj.variant.color if obj.variant else None
 
 
 class CartSerializer(serializers.ModelSerializer):

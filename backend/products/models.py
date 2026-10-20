@@ -9,6 +9,11 @@ from categories.models import Category, Collection
 SIZE_CHOICES = [
     ('XS', 'XS'), ('S', 'S'), ('M', 'M'), ('L', 'L'), ('XL', 'XL'), ('XXL', 'XXL'),
 ]
+COLORS = [
+    'Gray', 'Navy Blue', 'Black', 'Brown', 'Charcoal', 'White',
+    'Beige', 'Maroon', 'Cement Gray', 'Cream', 'Olive Green',
+]
+COLOR_CHOICES = [(c, c) for c in COLORS]
 
 
 class Product(models.Model):
@@ -34,7 +39,6 @@ class Product(models.Model):
     compare_at_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     gst_percent = models.DecimalField(max_digits=4, decimal_places=2, default=Decimal('5.00'))
 
-    color = models.CharField(max_length=60, blank=True)
     available_sizes = models.CharField(
         max_length=60, blank=True,
         help_text='Comma separated, e.g. S,M,L,XL'
@@ -79,6 +83,12 @@ class Product(models.Model):
         return [s.strip() for s in self.available_sizes.split(',') if s.strip()]
 
     @property
+    def colors(self):
+        """Colours this product comes in, from its variants, in COLORS order."""
+        have = {v.color for v in self.variants.all() if v.color}
+        return [c for c in COLORS if c in have]
+
+    @property
     def is_on_sale(self):
         return bool(self.compare_at_price and self.compare_at_price > self.price)
 
@@ -117,6 +127,7 @@ class ProductImage(models.Model):
     alt_text = models.CharField(max_length=200, blank=True)
     is_primary = models.BooleanField(default=False)
     display_order = models.PositiveIntegerField(default=0)
+    color = models.CharField(max_length=30, blank=True, choices=COLOR_CHOICES, help_text='Blank = shown for every colour.')
 
     class Meta:
         ordering = ['display_order']
@@ -126,21 +137,33 @@ class ProductImage(models.Model):
 
 
 class ProductVariant(models.Model):
-    """Size/stock combination used for inventory tracking."""
+    """Colour + size combination: the unit that is stocked, carted and ordered."""
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='variants')
+    sku = models.CharField('variant ID', max_length=80, unique=True, blank=True)
+    color = models.CharField(max_length=30, blank=True, choices=COLOR_CHOICES)
     size = models.CharField(max_length=10, choices=SIZE_CHOICES)
     stock_quantity = models.PositiveIntegerField(default=0)
     low_stock_threshold = models.PositiveIntegerField(default=3)
 
     class Meta:
-        unique_together = ('product', 'size')
+        unique_together = ('product', 'color', 'size')
 
     def __str__(self):
-        return f'{self.product.name} - {self.size} ({self.stock_quantity})'
+        return f'{self.product.name} - {self.color} {self.size} ({self.stock_quantity})'
+
+    def save(self, *args, **kwargs):
+        if not self.sku:
+            self.sku = make_variant_sku(self.product.sku, self.color, self.size)
+        super().save(*args, **kwargs)
 
     @property
     def is_low_stock(self):
         return 0 < self.stock_quantity <= self.low_stock_threshold
+
+
+def make_variant_sku(product_sku, color, size):
+    """e.g. FX-OS-01 + Navy Blue + M -> FX-OS-01-NAVYBLUE-M"""
+    return '-'.join(p for p in [product_sku, color.replace(' ', '').upper(), size] if p)
 
 
 class ProductReview(models.Model):

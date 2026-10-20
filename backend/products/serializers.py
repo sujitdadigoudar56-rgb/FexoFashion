@@ -11,13 +11,13 @@ User = get_user_model()
 class ProductImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductImage
-        fields = ['id', 'image', 'alt_text', 'is_primary', 'display_order']
+        fields = ['id', 'image', 'alt_text', 'is_primary', 'display_order', 'color']
 
 
 class ProductVariantSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductVariant
-        fields = ['id', 'size', 'stock_quantity', 'low_stock_threshold']
+        fields = ['id', 'sku', 'color', 'size', 'stock_quantity', 'low_stock_threshold']
 
 
 class ReviewUserSerializer(serializers.ModelSerializer):
@@ -47,13 +47,14 @@ class ProductSerializer(serializers.ModelSerializer):
     images = ProductImageSerializer(many=True, read_only=True)
     variants = ProductVariantSerializer(many=True, read_only=True)
     reviews = serializers.SerializerMethodField()
+    colors = serializers.ListField(read_only=True)
 
     class Meta:
         model = Product
         fields = [
             'id', 'name', 'slug', 'sku', 'category', 'collections',
             'short_description', 'description', 'fabric_details', 'size_guide',
-            'price', 'compare_at_price', 'gst_percent', 'color', 'available_sizes',
+            'price', 'compare_at_price', 'gst_percent', 'colors', 'available_sizes',
             'is_featured', 'is_trending', 'is_new_arrival', 'is_best_seller',
             'status', 'created_at', 'images', 'variants', 'reviews',
         ]
@@ -65,3 +66,4 @@ class ProductSerializer(serializers.ModelSerializer):
         if approved is None:
             approved = obj.reviews.filter(is_approved=True).select_related('user')
         return ProductReviewSerializer(approved, many=True, context=self.context).data
+

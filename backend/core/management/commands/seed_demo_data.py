@@ -50,13 +50,13 @@ class Command(BaseCommand):
 
         products_data = [
             ('Onyx Wool Overcoat', 'OverSized', 'FX-OWC-001', 18999, 22999, 'Charcoal', True, True, False, False),
-            ('Cashmere Crew Sweater', 'Regular Fit', 'FX-CCS-002', 9499, None, 'Ivory', True, False, True, False),
+            ('Cashmere Crew Sweater', 'Regular Fit', 'FX-CCS-002', 9499, None, 'Cream', True, False, True, False),
             ('Structured Wool Blazer', 'SweatShirt', 'FX-SWB-003', 15999, 17999, 'Black', False, True, False, True),
-            ('Sculpted Raw Denim', 'Hoodie', 'FX-SRD-004', 7999, None, 'Indigo', True, False, True, False),
-            ('Silk-Blend Trench', 'OverSized', 'FX-SBT-005', 21999, None, 'Sand', False, True, False, False),
+            ('Sculpted Raw Denim', 'Hoodie', 'FX-SRD-004', 7999, None, 'Navy Blue', True, False, True, False),
+            ('Silk-Blend Trench', 'OverSized', 'FX-SBT-005', 21999, None, 'Beige', False, True, False, False),
             ('Merino Turtleneck', 'Regular Fit', 'FX-MTN-006', 8499, 9999, 'Black', False, False, True, True),
-            ('Tapered Wool Trouser', 'SweatShirt', 'FX-TWT-007', 10999, None, 'Graphite', True, False, False, True),
-            ('Selvedge Denim Jacket', 'Hoodie', 'FX-SDJ-008', 12999, 14999, 'Washed Blue', False, True, True, False),
+            ('Tapered Wool Trouser', 'SweatShirt', 'FX-TWT-007', 10999, None, 'Cement Gray', True, False, False, True),
+            ('Selvedge Denim Jacket', 'Hoodie', 'FX-SDJ-008', 12999, 14999, 'Gray', False, True, True, False),
         ]
 
         created_count = 0
@@ -75,7 +75,6 @@ class Command(BaseCommand):
                     size_guide='True to size. Consult our size chart for a tailored fit.',
                     price=Decimal(str(price)),
                     compare_at_price=Decimal(str(compare)) if compare else None,
-                    color=color,
                     available_sizes='S,M,L,XL',
                     is_featured=feat, is_trending=trend, is_new_arrival=new, is_best_seller=best,
                     status='published',
@@ -85,7 +84,7 @@ class Command(BaseCommand):
                 created_count += 1
                 product.collections.add(collection)
                 for size in ['S', 'M', 'L', 'XL']:
-                    ProductVariant.objects.create(product=product, size=size, stock_quantity=12)
+                    ProductVariant.objects.create(product=product, color=color, size=size, stock_quantity=12)
                 primary = ProductImage(product=product, is_primary=True, display_order=0)
                 primary.image.save(f'{product.slug}-1.jpg', _placeholder_image(name), save=True)
                 secondary = ProductImage(product=product, is_primary=False, display_order=1)
