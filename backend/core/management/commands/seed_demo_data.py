@@ -31,10 +31,10 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         cats = [
-            ('Outerwear', 'Precision-tailored coats and jackets.'),
-            ('Knitwear', 'Luxury fibers, minimal silhouettes.'),
-            ('Tailoring', 'Structured suiting for the modern wardrobe.'),
-            ('Denim', 'Raw, sculpted, and built to last.'),
+            ('OverSized', 'Relaxed, dropped-shoulder silhouettes.'),
+            ('Regular Fit', 'Clean, true-to-size everyday fits.'),
+            ('SweatShirt', 'Heavyweight fleece crews.'),
+            ('Hoodie', 'Brushed-fleece hoodies built to last.'),
         ]
         cat_objs = {}
         for name, desc in cats:
@@ -49,14 +49,14 @@ class Command(BaseCommand):
         )
 
         products_data = [
-            ('Onyx Wool Overcoat', 'Outerwear', 'FX-OWC-001', 18999, 22999, 'Charcoal', True, True, False, False),
-            ('Cashmere Crew Sweater', 'Knitwear', 'FX-CCS-002', 9499, None, 'Ivory', True, False, True, False),
-            ('Structured Wool Blazer', 'Tailoring', 'FX-SWB-003', 15999, 17999, 'Black', False, True, False, True),
-            ('Sculpted Raw Denim', 'Denim', 'FX-SRD-004', 7999, None, 'Indigo', True, False, True, False),
-            ('Silk-Blend Trench', 'Outerwear', 'FX-SBT-005', 21999, None, 'Sand', False, True, False, False),
-            ('Merino Turtleneck', 'Knitwear', 'FX-MTN-006', 8499, 9999, 'Black', False, False, True, True),
-            ('Tapered Wool Trouser', 'Tailoring', 'FX-TWT-007', 10999, None, 'Graphite', True, False, False, True),
-            ('Selvedge Denim Jacket', 'Denim', 'FX-SDJ-008', 12999, 14999, 'Washed Blue', False, True, True, False),
+            ('Onyx Wool Overcoat', 'OverSized', 'FX-OWC-001', 18999, 22999, 'Charcoal', True, True, False, False),
+            ('Cashmere Crew Sweater', 'Regular Fit', 'FX-CCS-002', 9499, None, 'Ivory', True, False, True, False),
+            ('Structured Wool Blazer', 'SweatShirt', 'FX-SWB-003', 15999, 17999, 'Black', False, True, False, True),
+            ('Sculpted Raw Denim', 'Hoodie', 'FX-SRD-004', 7999, None, 'Indigo', True, False, True, False),
+            ('Silk-Blend Trench', 'OverSized', 'FX-SBT-005', 21999, None, 'Sand', False, True, False, False),
+            ('Merino Turtleneck', 'Regular Fit', 'FX-MTN-006', 8499, 9999, 'Black', False, False, True, True),
+            ('Tapered Wool Trouser', 'SweatShirt', 'FX-TWT-007', 10999, None, 'Graphite', True, False, False, True),
+            ('Selvedge Denim Jacket', 'Hoodie', 'FX-SDJ-008', 12999, 14999, 'Washed Blue', False, True, True, False),
         ]
 
         created_count = 0
