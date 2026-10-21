@@ -44,6 +44,7 @@ CORS_ALLOWED_ORIGINS = list({
     'https://fexofashion.com',
     'https://www.fexofashion.com',
     'https://staging.fexofashion.com',
+    'https://fexo-fashion-frontend-prod.vercel.app',
     # Admin app (Fexo-admin): local dev and its Vercel deployment.
     'http://localhost:3001',
     'https://fexo-admin.vercel.app',
@@ -87,6 +88,12 @@ CSRF_TRUSTED_ORIGINS = [
     for origin in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',')
     if origin.strip()
 ]
+
+# Render sets this on every service, so each deploy (staging, prod) accepts
+# its own onrender.com address without an ALLOWED_HOSTS edit.
+if os.environ.get('RENDER_EXTERNAL_HOSTNAME'):
+    ALLOWED_HOSTS.append(os.environ['RENDER_EXTERNAL_HOSTNAME'])
+    CSRF_TRUSTED_ORIGINS.append(f"https://{os.environ['RENDER_EXTERNAL_HOSTNAME']}")
 
 # Render (and most PaaS hosts) terminate TLS at the edge and proxy to this
 # container over plain HTTP, setting X-Forwarded-Proto so Django can tell
